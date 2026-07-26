@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PanelView — cinematic comic reader</title>
+<meta name="description" content="Read CBZ, image folders, and Comic Sol projects in your browser. Page, webtoon, and cinematic guided panel-by-panel modes. 100% client-side.">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23111420'/><rect x='14' y='14' width='72' height='40' rx='6' fill='%23f5c518'/><rect x='14' y='62' width='33' height='24' rx='6' fill='%233a86ff'/><rect x='53' y='62' width='33' height='24' rx='6' fill='%23e0e3ef'/></svg>">
+</head>
+<body>
+
+<div id="landing">
+  <header class="hero">
+    <h1><span class="logo-mark"></span>PanelView</h1>
+    <p class="tagline">A cinematic comic reader that runs entirely in your browser.</p>
+    <p class="sub">CBZ &middot; image folders &middot; <a href="https://github.com/wenn-id/comic-sol" target="_blank" rel="noopener">Comic Sol</a> projects — nothing is uploaded, ever.</p>
+  </header>
+
+  <div id="dropzone" tabindex="0" role="button" aria-label="Open a comic">
+    <div class="dz-inner">
+      <div class="dz-icon">⤓</div>
+      <strong>Drop a .cbz / .zip, an image folder, or a Comic Sol project</strong>
+      <span>or click to pick files</span>
+    </div>
+  </div>
+
+  <div class="landing-actions">
+    <button id="btn-demo" class="btn-primary">▶ Try the demo comic</button>
+  </div>
+
+  <section class="features">
+    <div><h3>📖 Page</h3><p>Classic one-page-at-a-time with keyboard &amp; swipe.</p></div>
+    <div><h3>📜 Webtoon</h3><p>Smooth vertical scroll for long strips.</p></div>
+    <div><h3>🎬 Guided</h3><p>The camera glides panel-to-panel. Comic Sol projects get pixel-exact framing from their manifest; other comics use automatic panel detection.</p></div>
+  </section>
+
+  <footer>
+    <a href="https://github.com/wenn-id/panelview" target="_blank" rel="noopener">GitHub</a> ·
+    MIT · No tracking, no server.
+  </footer>
+  <input type="file" id="file-input" multiple hidden>
+  <input type="file" id="dir-input" webkitdirectory hidden>
+</div>
+
+<div id="reader" hidden>
+  <div id="progress"><div id="progress-fill"></div></div>
+  <div id="toolbar">
+    <button id="btn-close" title="Close (Esc)">✕</button>
+    <span id="book-title"></span>
+    <nav id="modes">
+      <button data-mode="page"  title="Page mode (1)">📖</button>
+      <button data-mode="webtoon" title="Webtoon mode (2)">📜</button>
+      <button data-mode="guided" title="Guided mode (3)">🎬</button>
+    </nav>
+    <span id="pos"></span>
+    <button id="btn-fs" title="Fullscreen (f)">⛶</button>
+  </div>
+  <div id="stage"></div>
+  <div id="hint"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

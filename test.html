@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>PanelView tests</title></head>
+<body>
+<pre id="out">running…</pre>
+<div id="landing" hidden><div id="dropzone"></div><button id="btn-demo"></button>
+<input type="file" id="file-input" hidden><input type="file" id="dir-input" hidden></div>
+<div id="reader" hidden><div id="progress"><div id="progress-fill"></div></div>
+<div id="toolbar"><button id="btn-close"></button><span id="book-title"></span>
+<nav id="modes"><button data-mode="page"></button><button data-mode="webtoon"></button><button data-mode="guided"></button></nav>
+<span id="pos"></span><button id="btn-fs"></button></div><div id="stage"></div><div id="hint"></div></div>
+<script src="app.js"></script>
+<script>
+(async () => {
+  const { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap } = window.__panelview;
+  const results = [];
+  const t = (name, cond) => results.push((cond ? "PASS " : "FAIL ") + name);
+
+  /* natural sort */
+  const sorted = ["p10.png","p2.png","p1.png"].sort(naturalCompare);
+  t("naturalCompare", sorted.join(",") === "p1.png,p2.png,p10.png");
+
+  /* layout rects: all 5 layouts in bounds, no overlaps */
+  const overlap = (a,b) => !(a.x+a.width<=b.x || b.x+b.width<=a.x || a.y+a.height<=b.y || b.y+b.height<=a.y);
+  for (const name of ["full-page","two-horizontal","three-horizontal","hero-top-two-bottom","two-top-hero-bottom"]) {
+    const rects = layoutRects(name, 1600, 2400);
+    let ok = rects.length > 0;
+    for (const r of rects) ok = ok && r.x >= 0 && r.y >= 0 && r.x + r.width <= 1600 && r.y + r.height <= 2400 && r.width > 0 && r.height > 0;
+    for (let i = 0; i < rects.length; i++) for (let j = i+1; j < rects.length; j++) ok = ok && !overlap(rects[i], rects[j]);
+    t("layout " + name, ok);
+  }
+  t("layout unknown → null", layoutRects("nope") === null);
+  /* parity with comic_sol.py constants */
+  const hero = layoutRects("hero-top-two-bottom", 1600, 2400);
+  t("hero height parity (1176)", hero[0].height === 1176);
+
+  /* runsOf */
+  const flags = new Uint8Array([1,0,0,0,1,0,1,1,0,0]);
+  const runs = runsOf(flags, 0, flags.length, 2);
+  t("runsOf", JSON.stringify(runs) === "[[1,4],[8,10]]");
+
+  /* ZIP roundtrip: build a zip (stored) in JS, read it back */
+  function buildStoredZip(files) {
+    const enc = new TextEncoder();
+    const chunks = [], central = [];
+    let offset = 0;
+    const crcTable = (() => { const t = new Uint32Array(256); for (let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c;} return t; })();
+    const crc32 = (buf) => { let c = 0xFFFFFFFF; for (const b of buf) c = crcTable[(c ^ b) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+    for (const [name, text] of files) {
+      const nameB = enc.encode(name), data = enc.encode(text), crc = crc32(data);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true);
+      lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+      lh.setUint16(26, nameB.length, true);
+      chunks.push(new Uint8Array(lh.buffer), nameB, data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(10, 0, true);
+      ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+      ch.setUint16(28, nameB.length, true); ch.setUint32(42, offset, true);
+      central.push(new Uint8Array(ch.buffer), nameB);
+      offset += 30 + nameB.length + data.length;
+    }
+    const cdStart = offset;
+    let cdLen = 0;
+    for (const c of central) cdLen += c.length;
+    const eocd = new DataView(new ArrayBuffer(22));
+    eocd.setUint32(0, 0x06054b50, true);
+    eocd.setUint16(8, files.length, true); eocd.setUint16(10, files.length, true);
+    eocd.setUint32(12, cdLen, true); eocd.setUint32(16, cdStart, true);
+    return new Blob([...chunks, ...central, new Uint8Array(eocd.buffer)]);
+  }
+  const zblob = buildStoredZip([["book/p1.png","AAA"],["book/p2.png","BBB"]]);
+  const zip = await readZip(zblob);
+  t("zip entry count", zip.entries.length === 2);
+  const body = await (await zip.extract(zip.entries[1])).text();
+  t("zip extract stored", body === "BBB");
+  const map = await fileMapFromZip(zblob);
+  t("zip prefix strip", map.has("p1.png") && map.has("p2.png"));
+  const book = await bookFromFileMap(map, "TestBook");
+  t("bookFromFileMap", book.pages.length === 2 && book.title === "TestBook" && !book.comicSol);
+
+  /* comic sol book */
+  const cs = new Map();
+  cs.set("project.json", async () => new Blob([JSON.stringify({project_id:"x",settings:{page_width:1600,page_height:2400}})]));
+  cs.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"three-horizontal",panels:[{},{},{}]}]})]));
+  cs.set("pages/page-001.png", async () => new Blob(["fake"]));
+  const csBook = await bookFromFileMap(cs, "fb");
+  t("comic sol detect", csBook.comicSol && csBook.pages.length === 1 && csBook.pages[0].panels.length === 3);
+
+  const failed = results.filter((r) => r.startsWith("FAIL")).length;
+  document.getElementById("out").textContent = results.join("\n") + `\n\n${results.length - failed}/${results.length} passed`;
+  document.title = failed ? "FAIL" : "PASS";
+})().catch((e) => { document.getElementById("out").textContent = "ERROR " + e.stack; document.title = "FAIL"; });
+</script>
+</body>
+</html>

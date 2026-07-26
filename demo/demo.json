@@ -1,0 +1,23 @@
+{
+ "title": "Hujan Pertemuan",
+ "pages": [
+  {
+   "number": 1,
+   "image": "page-001.jpg",
+   "layout": "hero-top-two-bottom",
+   "panel_count": 3
+  },
+  {
+   "number": 2,
+   "image": "page-002.jpg",
+   "layout": "three-horizontal",
+   "panel_count": 3
+  },
+  {
+   "number": 3,
+   "image": "page-003.jpg",
+   "layout": "two-top-hero-bottom",
+   "panel_count": 3
+  }
+ ]
+}
