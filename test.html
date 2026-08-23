@@ -101,6 +101,8 @@
   const csBook = await bookFromFileMap(cs, "fb");
   t("comic sol detect", csBook.comicSol && csBook.pages.length === 1 && csBook.pages[0].panels.length === 3);
 
+  /* custom layout: no fixed rects in the registry, keep panels null so guided mode
+     falls back to automatic detection; warn so the fallback is visible */
   const custom = new Map(cs);
   custom.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"custom",panels:[]}]})]));
   const originalWarn = console.warn;
@@ -108,8 +110,59 @@
   console.warn = (message) => { customWarning = message; };
   const customBook = await bookFromFileMap(custom, "fb");
   console.warn = originalWarn;
-  t("comic sol custom layout falls back to full-page", JSON.stringify(customBook.pages[0].panels) === JSON.stringify(layoutRects("full-page")));
-  t("comic sol custom layout warns", customWarning.includes("custom layout") && customWarning.includes("full-page"));
+  t("comic sol custom layout keeps automatic detection", customBook.pages[0].panels === null);
+  t("comic sol custom layout warns", customWarning.includes("custom layout") && customWarning.includes("automatic panel detection"));
+  /* rect-from-manifest: storyboard rects win over layout names */
+  const csRects = new Map();
+  csRects.set("project.json", async () => new Blob([JSON.stringify({project_id:"r",settings:{page_width:1600,page_height:2400}})]));
+  csRects.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"full-page",panels:[
+    {rect:{x:10,y:20,width:100,height:200}},
+    {rect:{x:210,y:20,width:300,height:200}},
+  ]}]})]));
+  csRects.set("pages/page-001.png", async () => new Blob(["fake"]));
+  const csRectsBook = await bookFromFileMap(csRects, "fb");
+  const rp = csRectsBook.pages[0].panels;
+  t("rects win over layout name", csRectsBook.comicSol && rp.length === 2 && rp[0].x === 10 && rp[0].y === 20 && rp[1].width === 300);
+
+  /* unknown layout + valid rects still frames exactly */
+  const csUnknown = new Map();
+  csUnknown.set("project.json", csRects.get("project.json"));
+  csUnknown.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"mystery-layout",panels:[
+    {rect:{x:64,y:64,width:720,height:1120}},
+  ]}]})]));
+  csUnknown.set("pages/page-001.png", async () => new Blob(["fake"]));
+  const csUnknownBook = await bookFromFileMap(csUnknown, "fb");
+  t("unknown layout + rects → rects", csUnknownBook.comicSol && csUnknownBook.pages[0].panels.length === 1 && csUnknownBook.pages[0].panels[0].width === 720);
+
+  /* any invalid rect → whole page falls back to layout math */
+  const csBad = new Map();
+  csBad.set("project.json", csRects.get("project.json"));
+  csBad.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"two-horizontal",panels:[
+    {rect:{x:64,y:64,width:1000,height:1000}},
+    {rect:{x:-5,y:1200,width:100,height:100}},
+  ]}]})]));
+  csBad.set("pages/page-001.png", async () => new Blob(["fake"]));
+  const csBadBook = await bookFromFileMap(csBad, "fb");
+  t("invalid rects → layout fallback", csBadBook.comicSol && csBadBook.pages[0].panels.length === 2 && csBadBook.pages[0].panels[0].width === 1472);
+
+  /* detection: project.json without plan/storyboard.json alongside is not Comic Sol */
+  const csOrphan = new Map();
+  csOrphan.set("project.json", csRects.get("project.json"));
+  csOrphan.set("pages/page-001.png", async () => new Blob(["fake"]));
+  const csOrphanBook = await bookFromFileMap(csOrphan, "fb");
+  t("orphan project.json → generic book", !csOrphanBook.comicSol && csOrphanBook.pages.length === 1);
+
+  /* detection: same-suffix file and nested unrelated manifest ignored, shallowest real one wins */
+  const csMulti = new Map();
+  csMulti.set("myproject.json", async () => new Blob(["{}"]));
+  csMulti.set("docs/project.json", async () => new Blob([JSON.stringify({project_id:"deep",settings:{}})]));
+  csMulti.set("docs/plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"full-page",panels:[{rect:{x:1,y:2,width:9,height:9}}]}]})]));
+  csMulti.set("docs/pages/page-001.png", async () => new Blob(["fake"]));
+  csMulti.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"three-horizontal",panels:[{},{},{}]}]})]));
+  csMulti.set("project.json", async () => new Blob([JSON.stringify({project_id:"root",settings:{page_width:1600,page_height:2400}})]));
+  csMulti.set("pages/page-001.png", async () => new Blob(["fake"]));
+  const csMultiBook = await bookFromFileMap(csMulti, "fb");
+  t("shallowest adjacent manifest wins", csMultiBook.comicSol && csMultiBook.title === "root" && csMultiBook.pages[0].panels.length === 3);
 
   const failed = results.filter((r) => r.startsWith("FAIL")).length;
   document.getElementById("out").textContent = results.join("\n") + `\n\n${results.length - failed}/${results.length} passed`;

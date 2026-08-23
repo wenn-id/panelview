@@ -47,7 +47,7 @@ Then drop in:
 
 ## Comic Sol integration
 
-[Comic Sol](https://github.com/wenn-id/comic-sol) is an agent skill that turns a story prompt into a finished comic. Its projects carry deterministic panel geometry (fixed layout grammar, 1600×2400 pages). PanelView ports that layout math (`layout_rects`) to JS, so any Comic Sol output folder becomes a cinematic guided-view experience with zero configuration.
+[Comic Sol](https://github.com/wenn-id/comic-sol) is an agent skill that turns a story prompt into a finished comic. Its storyboards carry the exact pixel rect of every panel (`plan/storyboard.json` → `pages[].panels[].rect`), and PanelView reads those rects directly, so any Comic Sol output folder becomes a cinematic guided-view experience with zero configuration. For manifests without rects, a JS port of Comic Sol's layout math (`layout_rects`) acts as fallback geometry.
 
 ## Tests
 
