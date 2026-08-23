@@ -40,6 +40,13 @@
     {x:64,y:1216,width:720,height:1120},
     {x:816,y:1216,width:720,height:1120},
   ]));
+  const originalFlatMap = Array.prototype.flatMap;
+  try {
+    Array.prototype.flatMap = undefined;
+    t("four-grid works without flatMap", layoutRects("four-grid").length === 4);
+  } finally {
+    Array.prototype.flatMap = originalFlatMap;
+  }
 
   /* runsOf */
   const flags = new Uint8Array([1,0,0,0,1,0,1,1,0,0]);
