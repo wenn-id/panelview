@@ -74,6 +74,12 @@ function layoutRects(name, pageWidth = 1600, pageHeight = 2400, margin = 64, gut
     "three-horizontal": [0, 1, 2].map((i) => ({
       x: margin, y: margin + i * (thirdH + gutter), width: iw, height: thirdH,
     })),
+    "four-grid": [0, 1].flatMap((row) => [0, 1].map((column) => ({
+      x: margin + column * (halfW + gutter),
+      y: margin + row * (halfH + gutter),
+      width: halfW,
+      height: halfH,
+    }))),
     "hero-top-two-bottom": [
       { x: margin, y: margin, width: iw, height: heroH },
       { x: margin, y: margin + heroH + gutter, width: halfW, height: supportH },
@@ -208,7 +214,12 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
     const sb = byNumber[i];
     let panels = null;
     if (sb && sb.layout) {
-      panels = layoutRects(sb.layout, pw, ph);
+      if (sb.layout === "custom") {
+        console.warn(`Comic Sol page ${i + 1} uses a custom layout; falling back to full-page.`);
+        panels = layoutRects("full-page", pw, ph);
+      } else {
+        panels = layoutRects(sb.layout, pw, ph);
+      }
     }
     return { get: fileMap.get(p), panels, srcW: pw, srcH: ph };
   });
