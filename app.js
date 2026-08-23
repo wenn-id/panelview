@@ -74,6 +74,12 @@ function layoutRects(name, pageWidth = 1600, pageHeight = 2400, margin = 64, gut
     "three-horizontal": [0, 1, 2].map((i) => ({
       x: margin, y: margin + i * (thirdH + gutter), width: iw, height: thirdH,
     })),
+    "four-grid": [
+      { x: margin, y: margin, width: halfW, height: halfH },
+      { x: margin + halfW + gutter, y: margin, width: halfW, height: halfH },
+      { x: margin, y: margin + halfH + gutter, width: halfW, height: halfH },
+      { x: margin + halfW + gutter, y: margin + halfH + gutter, width: halfW, height: halfH },
+    ],
     "hero-top-two-bottom": [
       { x: margin, y: margin, width: iw, height: heroH },
       { x: margin, y: margin + heroH + gutter, width: halfW, height: supportH },
@@ -234,7 +240,13 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
   if (!pagePaths.length) throw new Error("no pages/ images");
   const byNumber = storyboard.pages || [];
   const pages = pagePaths.map((p, i) => {
-    const panels = panelsFromStoryboard(byNumber[i], pw, ph);
+    const sb = byNumber[i];
+    let panels = null;
+    if (sb && sb.layout === "custom") {
+      console.warn(`Comic Sol page ${i + 1} uses a custom layout; using automatic panel detection.`);
+    } else {
+      panels = panelsFromStoryboard(sb, pw, ph);
+    }
     return { get: fileMap.get(p), panels, srcW: pw, srcH: ph };
   });
   const title = project.title || project.project_id || fallbackTitle;

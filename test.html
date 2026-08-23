@@ -20,9 +20,9 @@
   const sorted = ["p10.png","p2.png","p1.png"].sort(naturalCompare);
   t("naturalCompare", sorted.join(",") === "p1.png,p2.png,p10.png");
 
-  /* layout rects: all 5 layouts in bounds, no overlaps */
+  /* layout rects: all 6 layouts in bounds, no overlaps */
   const overlap = (a,b) => !(a.x+a.width<=b.x || b.x+b.width<=a.x || a.y+a.height<=b.y || b.y+b.height<=a.y);
-  for (const name of ["full-page","two-horizontal","three-horizontal","hero-top-two-bottom","two-top-hero-bottom"]) {
+  for (const name of ["full-page","two-horizontal","three-horizontal","four-grid","hero-top-two-bottom","two-top-hero-bottom"]) {
     const rects = layoutRects(name, 1600, 2400);
     let ok = rects.length > 0;
     for (const r of rects) ok = ok && r.x >= 0 && r.y >= 0 && r.x + r.width <= 1600 && r.y + r.height <= 2400 && r.width > 0 && r.height > 0;
@@ -33,6 +33,20 @@
   /* parity with comic_sol.py constants */
   const hero = layoutRects("hero-top-two-bottom", 1600, 2400);
   t("hero height parity (1176)", hero[0].height === 1176);
+  const fourGrid = layoutRects("four-grid", 1600, 2400);
+  t("four-grid parity", JSON.stringify(fourGrid) === JSON.stringify([
+    {x:64,y:64,width:720,height:1120},
+    {x:816,y:64,width:720,height:1120},
+    {x:64,y:1216,width:720,height:1120},
+    {x:816,y:1216,width:720,height:1120},
+  ]));
+  const originalFlatMap = Array.prototype.flatMap;
+  try {
+    Array.prototype.flatMap = undefined;
+    t("four-grid works without flatMap", layoutRects("four-grid").length === 4);
+  } finally {
+    Array.prototype.flatMap = originalFlatMap;
+  }
 
   /* runsOf */
   const flags = new Uint8Array([1,0,0,0,1,0,1,1,0,0]);
@@ -87,6 +101,17 @@
   const csBook = await bookFromFileMap(cs, "fb");
   t("comic sol detect", csBook.comicSol && csBook.pages.length === 1 && csBook.pages[0].panels.length === 3);
 
+  /* custom layout: no fixed rects in the registry, keep panels null so guided mode
+     falls back to automatic detection; warn so the fallback is visible */
+  const custom = new Map(cs);
+  custom.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"custom",panels:[]}]})]));
+  const originalWarn = console.warn;
+  let customWarning = "";
+  console.warn = (message) => { customWarning = message; };
+  const customBook = await bookFromFileMap(custom, "fb");
+  console.warn = originalWarn;
+  t("comic sol custom layout keeps automatic detection", customBook.pages[0].panels === null);
+  t("comic sol custom layout warns", customWarning.includes("custom layout") && customWarning.includes("automatic panel detection"));
   /* rect-from-manifest: storyboard rects win over layout names */
   const csRects = new Map();
   csRects.set("project.json", async () => new Blob([JSON.stringify({project_id:"r",settings:{page_width:1600,page_height:2400}})]));
