@@ -172,7 +172,12 @@ function runsOf(flags, start, end, minLen) {
 async function bookFromFileMap(fileMap, fallbackTitle) {
   /* fileMap: Map<relativePath, {blob | getBlob()}> */
   const paths = [...fileMap.keys()];
-  const projectPath = paths.find((p) => p.endsWith("project.json"));
+  /* Comic Sol detection: a basename-exact project.json with plan/storyboard.json
+     alongside it, shallowest match first — unrelated same-suffix files are ignored */
+  const isProjectJson = (p) => p === "project.json" || p.endsWith("/project.json");
+  const projectPath = paths
+    .filter((p) => isProjectJson(p) && fileMap.has(p.slice(0, -"project.json".length) + "plan/storyboard.json"))
+    .sort((a, b) => a.split("/").length - b.split("/").length || a.length - b.length)[0];
   if (projectPath) {
     const root = projectPath.slice(0, -"project.json".length);
     try {
@@ -191,6 +196,30 @@ async function bookFromFileMap(fileMap, fallbackTitle) {
   };
 }
 
+function validRect(r, pw, ph) {
+  return (
+    r && typeof r === "object" &&
+    Number.isFinite(r.x) && Number.isFinite(r.y) &&
+    Number.isFinite(r.width) && Number.isFinite(r.height) &&
+    r.width > 0 && r.height > 0 &&
+    r.x >= 0 && r.y >= 0 &&
+    r.x + r.width <= pw && r.y + r.height <= ph
+  );
+}
+
+/* Panel geometry for one storyboard page: exact rects from the manifest win;
+   the layout-name registry is only a fallback for pages without usable rects. */
+function panelsFromStoryboard(sb, pw, ph) {
+  if (sb && Array.isArray(sb.panels) && sb.panels.length) {
+    const all = sb.panels.map((p) => (p && p.rect && validRect(p.rect, pw, ph)
+      ? { x: p.rect.x, y: p.rect.y, width: p.rect.width, height: p.rect.height }
+      : null));
+    if (all.every(Boolean)) return all;
+  }
+  if (sb && sb.layout) return layoutRects(sb.layout, pw, ph);
+  return null;
+}
+
 async function comicSolBook(fileMap, root, fallbackTitle) {
   const readJson = async (rel) => {
     const f = fileMap.get(root + rel);
@@ -205,11 +234,7 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
   if (!pagePaths.length) throw new Error("no pages/ images");
   const byNumber = storyboard.pages || [];
   const pages = pagePaths.map((p, i) => {
-    const sb = byNumber[i];
-    let panels = null;
-    if (sb && sb.layout) {
-      panels = layoutRects(sb.layout, pw, ph);
-    }
+    const panels = panelsFromStoryboard(byNumber[i], pw, ph);
     return { get: fileMap.get(p), panels, srcW: pw, srcH: ph };
   });
   const title = project.title || project.project_id || fallbackTitle;
