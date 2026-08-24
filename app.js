@@ -238,7 +238,28 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
   const pw = s.page_width || 1600, ph = s.page_height || 2400;
   const pagePaths = [...fileMap.keys()].filter((p) => p.startsWith(root + "pages/") && IMG_RE.test(p)).sort(naturalCompare);
   if (!pagePaths.length) throw new Error("no pages/ images");
-  const byNumber = storyboard.pages || [];
+
+  /* Match pages to storyboard entries by explicit page number, not array index.
+     Storyboard pages carry a `number` field and files are named page-%03d.<ext>. */
+  const sbPages = (storyboard.pages || []).slice().sort((a, b) => {
+    const an = (a && typeof a.number === "number") ? a.number : Infinity;
+    const bn = (b && typeof b.number === "number") ? b.number : Infinity;
+    return an - bn;
+  });
+  const basename = (p) => p.slice(p.lastIndexOf("/") + 1).replace(IMG_RE, "");
+  const byName = new Map();
+  for (const sb of sbPages) {
+    if (sb && typeof sb.number === "number") {
+      byName.set(`page-${String(sb.number).padStart(3, "0")}`, sb);
+    }
+  }
+  const matched = pagePaths.map((p) => byName.get(basename(p)));
+  const allMatched = matched.every((m) => m != null);
+  if (!allMatched) {
+    console.warn("Comic Sol: could not match every page image to a storyboard page by number; falling back to index order.");
+  }
+  const byNumber = allMatched ? matched : sbPages;
+
   const pages = pagePaths.map((p, i) => {
     const sb = byNumber[i];
     let panels = null;
