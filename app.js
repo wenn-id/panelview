@@ -293,8 +293,22 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
     } else {
       panels = panelsFromStoryboard(sb, pw, ph);
     }
-    return { get: fileMap.get(p), panels, srcW: pw, srcH: ph };
+    /* motion-comic sources: unlettered panel art plus its storyboard text */
+    const motionPanels = Array.isArray(sb?.panels) ? sb.panels.map((panel) => {
+      const id = typeof panel?.id === "string" ? panel.id : "";
+      const cleanPath = id ? `${root}panels/${id}/clean.png` : "";
+      return {
+        id,
+        rect: panel?.rect,
+        text: Array.isArray(panel?.text) ? panel.text : [],
+        clean: cleanPath && fileMap.has(cleanPath) ? fileMap.get(cleanPath) : null,
+      };
+    }) : [];
+    return { get: fileMap.get(p), panels, motionPanels, srcW: pw, srcH: ph };
   });
+  /* motion-comic mode needs every panel: clean art + a rect to place it in */
+  const motionComic = pages.every((page) => page.motionPanels.length > 0
+    && page.motionPanels.every((panel) => panel.id && panel.clean && validRect(panel.rect, pw, ph)));
   const title = project.title || (project.project_id ? prettifySlug(project.project_id) : "") || fallbackTitle;
   return {
     title,
@@ -302,6 +316,7 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
        became presentation-friendly. */
     resumeId: project.title || project.project_id || fallbackTitle,
     comicSol: true,
+    motionComic,
     pages,
     ...(logline ? { subtitle: logline } : {}),
     ...(schemaNote ? { schemaNote } : {}),
@@ -387,6 +402,8 @@ const state = {
   urls: [],       /* object URL or in-flight promise per page */
   panelCache: [], /* resolved panel rects per page (image coords) */
   guided: null,
+  motion: null,
+  motionUrls: [],
 };
 
 /* bumped by every render()/close so stale async continuations can bail out */
@@ -395,6 +412,12 @@ const staleRender = (gen) => gen !== renderGen || !state.book;
 
 function bookKey(book) {
   return "panelview:" + (book.resumeId || book.title) + ":" + book.pages.length;
+}
+/* motion-comic mode exists only when every panel ships unlettered clean art */
+function modeSupported(book, mode) {
+  if (!book || !Array.isArray(book.pages) || !book.pages.length) return false;
+  if (mode !== "motion") return true;
+  return !!book.motionComic;
 }
 
 async function pageURL(i) {
@@ -437,6 +460,9 @@ async function openBook(book) {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(bookKey(book)) || "null"); } catch {}
   state.mode = saved?.mode || (book.comicSol ? "guided" : "page");
+  if (!modeSupported(book, state.mode)) state.mode = "guided";
+  const motionButton = document.querySelector('#modes button[data-mode="motion"]');
+  if (motionButton) motionButton.hidden = !modeSupported(book, "motion");
   state.page = Math.min(saved?.page || 0, book.pages.length - 1);
   state.panel = saved?.panel || 0;
   await render();
@@ -449,7 +475,8 @@ function closeBook() {
     /* state.urls may hold in-flight promises; only revoke settled object URLs */
     if (u && typeof u === "string") URL.revokeObjectURL(u);
   }
-  state.book = null; state.urls = []; state.guided = null;
+  for (const u of state.motionUrls || []) URL.revokeObjectURL(u);
+  state.book = null; state.urls = []; state.motionUrls = []; state.guided = null; state.motion = null;
   $("#reader").hidden = true;
   $("#landing").hidden = false;
 }
@@ -479,10 +506,14 @@ async function render() {
   ++renderGen;
   stage.className = "mode-" + state.mode;
   stage.innerHTML = "";
+  for (const u of state.motionUrls || []) URL.revokeObjectURL(u);
+  state.motionUrls = [];
   state.guided = null;
+  state.motion = null;
   document.querySelectorAll("#modes button").forEach((b) => b.classList.toggle("active", b.dataset.mode === state.mode));
   if (state.mode === "page") await renderPage();
   else if (state.mode === "webtoon") await renderWebtoon();
+  else if (state.mode === "motion") await renderMotion();
   else await renderGuided();
   persist();
 }
@@ -592,10 +623,77 @@ function frameCurrentPanel(animate = true) {
   persist();
 }
 
+/* ----- motion-comic: clean art + text overlay per panel ----- */
+
+async function renderMotion() {
+  const gen = renderGen;
+  const page = state.book.pages[state.page];
+  if (!page?.motionPanels?.length) { await renderGuided(); return; }
+  const viewport = document.createElement("div");
+  viewport.className = "motion-viewport";
+  const canvas = document.createElement("div");
+  canvas.className = "motion-canvas";
+  canvas.style.width = `${state.book.pages[state.page].srcW}px`;
+  canvas.style.height = `${state.book.pages[state.page].srcH}px`;
+  for (const mp of page.motionPanels) {
+    const url = URL.createObjectURL(await mp.clean());
+    state.motionUrls.push(url);
+    if (staleRender(gen)) return;
+    const panel = document.createElement("div");
+    panel.className = "motion-panel";
+    Object.assign(panel.style, { left: `${mp.rect.x}px`, top: `${mp.rect.y}px`, width: `${mp.rect.width}px`, height: `${mp.rect.height}px` });
+    const img = new Image();
+    img.src = url;
+    img.alt = mp.id;
+    panel.appendChild(img);
+    for (const item of mp.text) {
+      const label = document.createElement("p");
+      label.className = `motion-text motion-text-${item.anchor || "top-left"}`;
+      label.textContent = item.content || "";
+      if (item.speaker) label.dataset.speaker = item.speaker;
+      panel.appendChild(label);
+    }
+    canvas.appendChild(panel);
+  }
+  viewport.appendChild(canvas);
+  stage.appendChild(viewport);
+  state.panel = Math.min(state.panel || 0, page.motionPanels.length - 1);
+  state.motion = { viewport, canvas };
+  frameMotionPanel(false);
+}
+
+function frameMotionPanel(animate = true) {
+  const m = state.motion;
+  if (!m) return;
+  const panels = state.book.pages[state.page].motionPanels;
+  state.panel = Math.min(state.panel || 0, panels.length - 1);
+  const r = panels[state.panel].rect;
+  const vw = m.viewport.clientWidth, vh = m.viewport.clientHeight;
+  const pad = 0.045;
+  const scale = Math.min(vw / (r.width * (1 + pad * 2)), vh / (r.height * (1 + pad * 2)));
+  const tx = vw / 2 - (r.x + r.width / 2) * scale;
+  const ty = vh / 2 - (r.y + r.height / 2) * scale;
+  if (!animate) m.canvas.style.transition = "none";
+  m.canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  [...m.canvas.querySelectorAll(".motion-panel")].forEach((el, i) => el.classList.toggle("current", i === state.panel));
+  if (!animate) requestAnimationFrame(() => { m.canvas.style.transition = ""; });
+  updatePos(`p${state.page + 1} · panel ${state.panel + 1}/${panels.length}`);
+  setProgress((state.page + state.panel / panels.length + 1 / panels.length) / state.book.pages.length);
+  persist();
+}
+
+const fitMotionCanvas = (animate) => frameMotionPanel(animate);
+
 /* ---------------- navigation ---------------- */
 
 async function next() {
   if (!state.book) return;
+  if (state.mode === "motion" && state.motion) {
+    if (state.panel < state.book.pages[state.page].motionPanels.length - 1) { state.panel++; frameMotionPanel(); return; }
+    if (state.page < state.book.pages.length - 1) { state.page++; state.panel = 0; await render(); return; }
+    showHint("The end — Esc to close");
+    return;
+  }
   if (state.mode === "guided" && state.guided) {
     if (state.panel < state.guided.rects.length - 1) { state.panel++; frameCurrentPanel(); return; }
     if (state.page < state.book.pages.length - 1) { state.page++; state.panel = 0; await render(); return; }
@@ -608,6 +706,11 @@ async function next() {
 
 async function prev() {
   if (!state.book) return;
+  if (state.mode === "motion" && state.motion) {
+    if (state.panel > 0) { state.panel--; frameMotionPanel(); return; }
+    if (state.page > 0) { state.page--; state.panel = 1e9; await render(); return; }
+    return;
+  }
   if (state.mode === "guided" && state.guided) {
     if (state.panel > 0) { state.panel--; frameCurrentPanel(); return; }
     if (state.page > 0) {
@@ -698,6 +801,7 @@ document.addEventListener("keydown", (e) => {
     case "1": setMode("page"); break;
     case "2": setMode("webtoon"); break;
     case "3": setMode("guided"); break;
+    case "4": setMode("motion"); break;
     case "f": $("#btn-fs").click(); break;
     case "Escape": if (!document.fullscreenElement) closeBook(); break;
   }
@@ -714,7 +818,10 @@ stage.addEventListener("touchend", (e) => {
   touchX = null;
 }, { passive: true });
 
-window.addEventListener("resize", () => { if (state.mode === "guided") frameCurrentPanel(false); });
+window.addEventListener("resize", () => {
+  if (state.mode === "guided") frameCurrentPanel(false);
+  else if (state.mode === "motion") frameMotionPanel(false);
+});
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, state, setMode, next, prev };
