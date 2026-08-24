@@ -29,6 +29,16 @@ The Comic Sol schema definitions are authoritative for manifest structure:
 When Comic Sol changes a consumed field or bumps its schema, update this
 contract and the compatibility tests before relying on the new output.
 
+## Story plan presentation
+
+| `plan/story-plan.json` field | PanelView use | Tested versions |
+|---|---|---|
+| `logline` | Toolbar subtitle next to the book title | `"1.0"` |
+
+A missing story plan is fine; the subtitle simply stays hidden. When
+`project.json` has no `title`, the `project_id` slug is prettified into the
+display title (`sunlight-courier` → `Sunlight Courier`).
+
 ## Verification
 
 Open [`../test.html`](../test.html) in a browser. The compatibility tests cover

@@ -115,9 +115,18 @@ a:hover { text-decoration: underline; }
 }
 #toolbar button:hover { background: #ffffff14; }
 #modes button.active { background: var(--accent); color: #14120a; }
+#book-meta {
+  min-width: 0; flex: 1 1 auto;
+  display: flex; flex-direction: column; gap: 2px;
+  line-height: 1.15;
+}
 #book-title { font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#book-subtitle {
+  color: var(--dim); font-size: 0.78rem; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 #modes { margin-left: auto; display: flex; gap: 4px; }
-#pos { color: var(--dim); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+#pos { color: var(--dim); font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 #schema-warning {
   flex: none;
@@ -174,6 +183,7 @@ a:hover { text-decoration: underline; }
 #hint.show { opacity: 1; }
 
 @media (max-width: 600px) {
-  #book-title { max-width: 30vw; }
+  #book-meta { max-width: 42vw; }
+  #book-subtitle { display: none; }
   #dropzone { padding: 40px 16px; }
 }

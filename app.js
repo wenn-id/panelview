@@ -214,6 +214,12 @@ function validRect(r, pw, ph) {
   );
 }
 
+/* "sunlight-courier" → "Sunlight Courier": slugs are lowercase per Comic Sol
+   ID rules, so capitalizing each word's first letter is lossless enough. */
+function prettifySlug(slug) {
+  return String(slug).replace(/[-_]+/g, " ").trim().replace(/\S+/g, (w) => w[0].toUpperCase() + w.slice(1));
+}
+
 /* Panel geometry for one storyboard page: exact rects from the manifest win;
    the layout-name registry is only a fallback for pages without usable rects. */
 function panelsFromStoryboard(sb, pw, ph) {
@@ -235,6 +241,11 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
   };
   const project = await readJson("project.json");
   const storyboard = await readJson("plan/storyboard.json");
+  let logline = "";
+  try {
+    const storyPlan = await readJson("plan/story-plan.json");
+    if (storyPlan && typeof storyPlan.logline === "string") logline = storyPlan.logline.trim();
+  } catch {}
   const schemaVersion = project.schema_version;
   let schemaNote;
   if (schemaVersion == null) {
@@ -284,8 +295,17 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
     }
     return { get: fileMap.get(p), panels, srcW: pw, srcH: ph };
   });
-  const title = project.title || project.project_id || fallbackTitle;
-  return { title, comicSol: true, pages, ...(schemaNote ? { schemaNote } : {}) };
+  const title = project.title || (project.project_id ? prettifySlug(project.project_id) : "") || fallbackTitle;
+  return {
+    title,
+    /* Keep resume storage compatible with the title used before project IDs
+       became presentation-friendly. */
+    resumeId: project.title || project.project_id || fallbackTitle,
+    comicSol: true,
+    pages,
+    ...(logline ? { subtitle: logline } : {}),
+    ...(schemaNote ? { schemaNote } : {}),
+  };
 }
 
 /* ---------------- input handling ---------------- */
@@ -370,7 +390,7 @@ const state = {
 };
 
 function bookKey(book) {
-  return "panelview:" + book.title + ":" + book.pages.length;
+  return "panelview:" + (book.resumeId || book.title) + ":" + book.pages.length;
 }
 
 async function pageURL(i) {
@@ -387,6 +407,12 @@ async function openBook(book) {
   state.urls = new Array(book.pages.length);
   state.panelCache = new Array(book.pages.length);
   $("#book-title").textContent = book.title;
+  const subtitle = $("#book-subtitle");
+  if (subtitle) {
+    subtitle.textContent = book.subtitle || "";
+    subtitle.hidden = !book.subtitle;
+    $("#book-title").title = book.subtitle || "";
+  }
   const schemaWarning = $("#schema-warning");
   if (schemaWarning) {
     schemaWarning.hidden = !book.schemaNote || book.schemaNote === "legacy";
@@ -664,4 +690,4 @@ stage.addEventListener("touchend", (e) => {
 window.addEventListener("resize", () => { if (state.mode === "guided") frameCurrentPanel(false); });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey };
