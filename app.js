@@ -241,24 +241,28 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
 
   /* Match pages to storyboard entries by explicit page number, not array index.
      Storyboard pages carry a `number` field and files are named page-%03d.<ext>. */
-  const sbPages = (storyboard.pages || []).slice().sort((a, b) => {
+  const storyboardPages = storyboard.pages || [];
+  const sbPages = storyboardPages.slice().sort((a, b) => {
     const an = (a && typeof a.number === "number") ? a.number : Infinity;
     const bn = (b && typeof b.number === "number") ? b.number : Infinity;
     return an - bn;
   });
   const basename = (p) => p.slice(p.lastIndexOf("/") + 1).replace(IMG_RE, "");
+  const numberedPages = sbPages.filter((sb) => sb && typeof sb.number === "number");
+  const pageNumbers = new Set(numberedPages.map((sb) => sb.number));
+  const hasDuplicateNumbers = pageNumbers.size !== numberedPages.length;
   const byName = new Map();
-  for (const sb of sbPages) {
-    if (sb && typeof sb.number === "number") {
+  if (!hasDuplicateNumbers) {
+    for (const sb of numberedPages) {
       byName.set(`page-${String(sb.number).padStart(3, "0")}`, sb);
     }
   }
   const matched = pagePaths.map((p) => byName.get(basename(p)));
-  const allMatched = matched.every((m) => m != null);
+  const allMatched = !hasDuplicateNumbers && matched.every((m) => m != null);
   if (!allMatched) {
     console.warn("Comic Sol: could not match every page image to a storyboard page by number; falling back to index order.");
   }
-  const byNumber = allMatched ? matched : sbPages;
+  const byNumber = allMatched ? matched : storyboardPages;
 
   const pages = pagePaths.map((p, i) => {
     const sb = byNumber[i];
