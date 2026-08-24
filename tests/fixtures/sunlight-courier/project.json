@@ -1,0 +1,68 @@
+{
+  "artifacts": {
+    "character_bible": {
+      "path": "plan/character-bible.json",
+      "sha256": "86f6568201ebb3f499388b0a2844ebee747bf69a15971ade5d1542c7a2fb621a"
+    },
+    "pdf": {
+      "path": "exports/sunlight-courier.pdf",
+      "sha256": "7fc073bae781af2a4dfa0e6f800757a0a0f3141de25bc722a84afdbc8c964fe2"
+    },
+    "qa_report": {
+      "path": "qa/report.md",
+      "sha256": "38f5595cc915756ed65947ad291054d84f29ebac321998f11f2a82b9098d8fdd"
+    },
+    "story_plan": {
+      "path": "plan/story-plan.json",
+      "sha256": "582838313c63ffe1f700289124e46203dc93f77d20aa46200d6437053f7e83a9"
+    },
+    "storyboard": {
+      "path": "plan/storyboard.json",
+      "sha256": "e6facb3c4414533eda08774f5c9129291fb7ee2adedaf22ee3c0b2e5cdc8737d"
+    }
+  },
+  "capability": {
+    "detected_at": "2026-07-18T11:46:00Z",
+    "name": "built-in-imagegen-gpt-image-2",
+    "status": "available",
+    "supports_dimensions": false,
+    "supports_reference_images": true
+  },
+  "created_at": "2026-07-18T11:45:00Z",
+  "input": {
+    "language": "en",
+    "mode": "short_prompt",
+    "request_path": "source/request.json",
+    "source_path": "source/input.txt",
+    "source_sha256": "13d9e2aaa4e69bc1d050de5957e185b8d83d4a2ca5f6c3cb554382e43f0066a8"
+  },
+  "panels": [
+    "p01-01",
+    "p01-02",
+    "p02-01",
+    "p02-02"
+  ],
+  "project_id": "sunlight-courier",
+  "schema_version": "1.0",
+  "settings": {
+    "max_panel_retries": 2,
+    "page_count": 2,
+    "page_height": 2400,
+    "page_width": 1600,
+    "panel_count": 4,
+    "reading_direction": "ltr",
+    "style_anchor": "original high-contrast manga/anime; expressive ink-like linework; restrained color accents"
+  },
+  "stage_versions": {
+    "composition": "1",
+    "export": "1",
+    "generation": "1",
+    "lettering": "2",
+    "planning": "1",
+    "storyboard": "1"
+  },
+  "status": "COMPLETE",
+  "title": "Sunlight Courier",
+  "updated_at": "2026-07-18T08:01:18Z",
+  "warnings": []
+}

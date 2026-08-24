@@ -55,6 +55,16 @@ Then drop in:
 
 Open `test.html` in a browser (or via the static server). Assert-based checks for the ZIP parser, layout geometry parity, natural sort, and book detection — no framework.
 
+The zero-build CI runner uses system Chrome and Node's built-in CDP client:
+
+```bash
+node tools/run-tests.mjs test.html tools/parity.html
+```
+
+`tools/fetch-fixture.mjs` refreshes or verifies the pinned Comic Sol manifest fixture. CI runs `--check` so upstream changes cannot silently move parity expectations. Failed browser pages write PNGs to `shots/`; GitHub Actions uploads them as `failure-screenshots`.
+
+GitHub Pages deploys from `main` after the browser and parity gates pass. The live URL is the [demo](https://wenn-id.github.io/panelview/).
+
 ## Roadmap
 
 - CBR (RAR) support

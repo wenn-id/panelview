@@ -365,6 +365,11 @@
     resetReaderState(null);
   }
 
+  /* CI contract: headless runner + workflows must exist in the repo */
+  t("headless runner exists", (await fetch("tools/run-tests.mjs")).ok);
+  t("CI workflow exists", (await fetch(".github/workflows/ci.yml")).ok);
+  t("Pages deploy workflow exists", (await fetch(".github/workflows/pages.yml")).ok);
+
   const failed = results.filter((r) => r.startsWith("FAIL")).length;
   document.getElementById("out").textContent = results.join("\n") + `\n\n${results.length - failed}/${results.length} passed`;
   document.title = failed ? "FAIL" : "PASS";

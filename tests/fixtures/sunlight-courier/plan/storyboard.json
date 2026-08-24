@@ -1,0 +1,178 @@
+{
+  "pages": [
+    {
+      "layout": "two-horizontal",
+      "number": 1,
+      "panels": [
+        {
+          "action": "Mira receives the sealed sunlight vial.",
+          "beat": "The final light is entrusted to Mira.",
+          "characters": [
+            "mira"
+          ],
+          "composition": "Mira on a clear third with protected lettering space",
+          "continuity": [
+            "mira:amber scarf",
+            "mira:brass-clasp case"
+          ],
+          "expression": "focused determination",
+          "id": "p01-01",
+          "lighting": "amber sunlight key against cool cyan shadows",
+          "negative": [
+            "text",
+            "speech bubbles",
+            "watermark"
+          ],
+          "order": 1,
+          "rect": {
+            "height": 1120,
+            "width": 1472,
+            "x": 64,
+            "y": 64
+          },
+          "scene_id": "dispatch-hall",
+          "shot": "cinematic medium-wide manga panel",
+          "text": [
+            {
+              "anchor": "top-left",
+              "content": "One light remained below the world.",
+              "id": "p01-01-t01",
+              "kind": "caption",
+              "priority": 1,
+              "speaker": null
+            }
+          ]
+        },
+        {
+          "action": "Mira sprints across the collapsing bridge.",
+          "beat": "The bridge breaks during her crossing.",
+          "characters": [
+            "mira"
+          ],
+          "composition": "Mira on a clear third with protected lettering space",
+          "continuity": [
+            "mira:amber scarf",
+            "mira:brass-clasp case"
+          ],
+          "expression": "focused determination",
+          "id": "p01-02",
+          "lighting": "amber sunlight key against cool cyan shadows",
+          "negative": [
+            "text",
+            "speech bubbles",
+            "watermark"
+          ],
+          "order": 2,
+          "rect": {
+            "height": 1120,
+            "width": 1472,
+            "x": 64,
+            "y": 1216
+          },
+          "scene_id": "dispatch-hall",
+          "shot": "cinematic medium-wide manga panel",
+          "text": [
+            {
+              "anchor": "top-right",
+              "content": "No bridge. Still a route.",
+              "id": "p01-02-t01",
+              "kind": "dialogue",
+              "priority": 1,
+              "speaker": "mira",
+              "speaker_anchor": [
+                0.3,
+                0.2
+              ],
+              "voice_source": "human"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "layout": "two-horizontal",
+      "number": 2,
+      "panels": [
+        {
+          "action": "Mira lifts the vial over the dry soil.",
+          "beat": "Mira reaches the silent garden.",
+          "characters": [
+            "mira"
+          ],
+          "composition": "Mira on a clear third with protected lettering space",
+          "continuity": [
+            "mira:amber scarf",
+            "mira:brass-clasp case"
+          ],
+          "expression": "focused determination",
+          "id": "p02-01",
+          "lighting": "amber sunlight key against cool cyan shadows",
+          "negative": [
+            "text",
+            "speech bubbles",
+            "watermark"
+          ],
+          "order": 1,
+          "rect": {
+            "height": 1120,
+            "width": 1472,
+            "x": 64,
+            "y": 64
+          },
+          "scene_id": "root-garden",
+          "shot": "cinematic medium-wide manga panel",
+          "text": [
+            {
+              "anchor": "top-left",
+              "content": "At the oldest roots, the vial dimmed.",
+              "id": "p02-01-t01",
+              "kind": "caption",
+              "priority": 1,
+              "speaker": null
+            }
+          ]
+        },
+        {
+          "action": "Golden roots illuminate the cavern city around Mira.",
+          "beat": "The planted light awakens the city.",
+          "characters": [
+            "mira"
+          ],
+          "composition": "Mira on a clear third with protected lettering space",
+          "continuity": [
+            "mira:amber scarf",
+            "mira:brass-clasp case"
+          ],
+          "expression": "focused determination",
+          "id": "p02-02",
+          "lighting": "amber sunlight key against cool cyan shadows",
+          "negative": [
+            "text",
+            "speech bubbles",
+            "watermark"
+          ],
+          "order": 2,
+          "rect": {
+            "height": 1120,
+            "width": 1472,
+            "x": 64,
+            "y": 1216
+          },
+          "scene_id": "root-garden",
+          "shot": "cinematic medium-wide manga panel",
+          "text": [
+            {
+              "anchor": "top-left",
+              "content": "Morning found them underground.",
+              "id": "p02-02-t01",
+              "kind": "caption",
+              "priority": 1,
+              "speaker": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "schema_version": "1.0"
+}

@@ -1,0 +1,38 @@
+{
+  "beginning": "Mira receives the city’s last sunlight vial.",
+  "climax": "Mira plants the fading light in the root garden.",
+  "ending": "Golden roots awaken an artificial dawn throughout the city.",
+  "logline": "A courier races across a failing underground city to plant its last vial of sunlight.",
+  "rating": "teen",
+  "scenes": [
+    {
+      "characters": [
+        "mira"
+      ],
+      "continuity_anchor": "brass ribs, cyan machinery, amber vial glow",
+      "id": "dispatch-hall",
+      "location": "vast underground dispatch hall",
+      "purpose": "begin the final delivery",
+      "time": "artificial dusk"
+    },
+    {
+      "characters": [
+        "mira"
+      ],
+      "continuity_anchor": "enormous roots, dry soil, amber light against cyan shadow",
+      "id": "root-garden",
+      "location": "ancient root garden below the central tower",
+      "purpose": "complete the delivery and relight the city",
+      "time": "citywide blackout"
+    }
+  ],
+  "schema_version": "1.0",
+  "setting": "A brass-and-stone underground city lit by failing cyan machinery.",
+  "theme": "Hope becomes real when carried for others.",
+  "title": "Sunlight Courier",
+  "tone": [
+    "urgent",
+    "luminous"
+  ],
+  "turn": "The direct bridge collapses beneath her route."
+}
