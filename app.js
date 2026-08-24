@@ -298,6 +298,9 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
   const title = project.title || (project.project_id ? prettifySlug(project.project_id) : "") || fallbackTitle;
   return {
     title,
+    /* Keep resume storage compatible with the title used before project IDs
+       became presentation-friendly. */
+    resumeId: project.title || project.project_id || fallbackTitle,
     comicSol: true,
     pages,
     ...(logline ? { subtitle: logline } : {}),
@@ -387,7 +390,7 @@ const state = {
 };
 
 function bookKey(book) {
-  return "panelview:" + book.title + ":" + book.pages.length;
+  return "panelview:" + (book.resumeId || book.title) + ":" + book.pages.length;
 }
 
 async function pageURL(i) {
@@ -687,4 +690,4 @@ stage.addEventListener("touchend", (e) => {
 window.addEventListener("resize", () => { if (state.mode === "guided") frameCurrentPanel(false); });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey };

@@ -12,7 +12,7 @@
 <script src="app.js"></script>
 <script>
 (async () => {
-  const { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap } = window.__panelview;
+  const { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey } = window.__panelview;
   const results = [];
   const t = (name, cond) => results.push((cond ? "PASS " : "FAIL ") + name);
 
@@ -210,10 +210,12 @@
   titled.set("pages/page-001.png", async () => new Blob(["fake"]));
   const titledBook = await bookFromFileMap(titled, "Fallback");
   t("project_id slug becomes title", titledBook.title === "Sunlight Courier");
+  t("prettified title preserves raw project_id resume key", bookKey(titledBook) === "panelview:sunlight-courier:1");
   t("story-plan logline becomes subtitle", titledBook.subtitle === "A courier delivers sunlight to an underground city.");
   titled.set("project.json", async () => new Blob([JSON.stringify({title:"Sunlight Run",project_id:"sunlight-courier",settings:{page_width:1600,page_height:2400}})]));
   const explicitTitleBook = await bookFromFileMap(titled, "Fallback");
   t("explicit project title wins", explicitTitleBook.title === "Sunlight Run");
+  t("explicit title preserves existing resume key", bookKey(explicitTitleBook) === "panelview:Sunlight Run:1");
 
   const failed = results.filter((r) => r.startsWith("FAIL")).length;
   document.getElementById("out").textContent = results.join("\n") + `\n\n${results.length - failed}/${results.length} passed`;
