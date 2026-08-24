@@ -101,6 +101,26 @@
   const csBook = await bookFromFileMap(cs, "fb");
   t("comic sol detect", csBook.comicSol && csBook.pages.length === 1 && csBook.pages[0].panels.length === 3);
 
+  /* duplicate page numbers invalidate explicit matching and retain index order */
+  const csDuplicates = new Map(cs);
+  csDuplicates.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[
+    {number:1,panels:[{rect:{x:10,y:10,width:100,height:100}}]},
+    {number:1,panels:[{rect:{x:20,y:20,width:100,height:100}}]},
+  ]})]));
+  csDuplicates.set("pages/page-002.png", async () => new Blob(["fake"]));
+  const csDuplicatesBook = await bookFromFileMap(csDuplicates, "fb");
+  t("duplicate storyboard numbers → index fallback", csDuplicatesBook.pages[0].panels[0].x === 10 && csDuplicatesBook.pages[1].panels[0].x === 20);
+
+  /* failed explicit matching falls back to the untouched storyboard order */
+  const csUnsortedFallback = new Map(cs);
+  csUnsortedFallback.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[
+    {number:2,panels:[{rect:{x:20,y:20,width:100,height:100}}]},
+    {number:1,panels:[{rect:{x:10,y:10,width:100,height:100}}]},
+  ]})]));
+  csUnsortedFallback.set("pages/cover.png", async () => new Blob(["fake"]));
+  const csUnsortedFallbackBook = await bookFromFileMap(csUnsortedFallback, "fb");
+  t("explicit mismatch → original storyboard order", csUnsortedFallbackBook.pages[0].panels[0].x === 20 && csUnsortedFallbackBook.pages[1].panels[0].x === 10);
+
   /* custom layout: no fixed rects in the registry, keep panels null so guided mode
      falls back to automatic detection; warn so the fallback is visible */
   const custom = new Map(cs);
