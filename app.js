@@ -4,6 +4,7 @@
 /* ---------------- utilities ---------------- */
 
 const IMG_RE = /\.(png|jpe?g|webp|gif|avif)$/i;
+const TESTED_COMIC_SOL_SCHEMA_VERSIONS = new Set(["1.0"]);
 
 function naturalCompare(a, b) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -234,6 +235,15 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
   };
   const project = await readJson("project.json");
   const storyboard = await readJson("plan/storyboard.json");
+  const schemaVersion = project.schema_version;
+  let schemaNote;
+  if (schemaVersion == null) {
+    schemaNote = "legacy";
+    console.info("Comic Sol project has no schema_version; treating it as a legacy manifest.");
+  } else if (!TESTED_COMIC_SOL_SCHEMA_VERSIONS.has(schemaVersion)) {
+    schemaNote = `Project schema ${schemaVersion} has not been tested with this reader; rendering may be off.`;
+    console.warn(schemaNote);
+  }
   const s = project.settings || {};
   const pw = s.page_width || 1600, ph = s.page_height || 2400;
   const pagePaths = [...fileMap.keys()].filter((p) => p.startsWith(root + "pages/") && IMG_RE.test(p)).sort(naturalCompare);
@@ -275,7 +285,7 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
     return { get: fileMap.get(p), panels, srcW: pw, srcH: ph };
   });
   const title = project.title || project.project_id || fallbackTitle;
-  return { title, comicSol: true, pages };
+  return { title, comicSol: true, pages, ...(schemaNote ? { schemaNote } : {}) };
 }
 
 /* ---------------- input handling ---------------- */
@@ -377,6 +387,11 @@ async function openBook(book) {
   state.urls = new Array(book.pages.length);
   state.panelCache = new Array(book.pages.length);
   $("#book-title").textContent = book.title;
+  const schemaWarning = $("#schema-warning");
+  if (schemaWarning) {
+    schemaWarning.hidden = !book.schemaNote || book.schemaNote === "legacy";
+    schemaWarning.textContent = book.schemaNote === "legacy" ? "" : book.schemaNote;
+  }
   $("#landing").hidden = true;
   $("#reader").hidden = false;
   /* resume */

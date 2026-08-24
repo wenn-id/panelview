@@ -119,6 +119,16 @@ a:hover { text-decoration: underline; }
 #modes { margin-left: auto; display: flex; gap: 4px; }
 #pos { color: var(--dim); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 
+#schema-warning {
+  flex: none;
+  padding: 8px 16px;
+  background: #6b4d00;
+  color: #fff3c4;
+  border-bottom: 1px solid #f5c51866;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 #stage { flex: 1; position: relative; overflow: hidden; }
 
 /* page mode */
