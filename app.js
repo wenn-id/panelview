@@ -384,19 +384,32 @@ const state = {
   mode: "page",
   page: 0,
   panel: 0,
-  urls: [],       /* object URLs per page */
+  urls: [],       /* object URL or in-flight promise per page */
   panelCache: [], /* resolved panel rects per page (image coords) */
   guided: null,
 };
+
+/* bumped by every render()/close so stale async continuations can bail out */
+let renderGen = 0;
+const staleRender = (gen) => gen !== renderGen || !state.book;
 
 function bookKey(book) {
   return "panelview:" + (book.resumeId || book.title) + ":" + book.pages.length;
 }
 
 async function pageURL(i) {
+  /* store the promise so concurrent callers share one fetch + one object URL */
   if (!state.urls[i]) {
-    const blob = await state.book.pages[i].get();
-    state.urls[i] = URL.createObjectURL(blob);
+    const p = state.book.pages[i].get().then((blob) => {
+      const url = URL.createObjectURL(blob);
+      if (state.urls[i] === p) state.urls[i] = url;
+      /* closed (or reopened) while in flight: nothing will revoke this slot later */
+      else URL.revokeObjectURL(url);
+      return url;
+    });
+    /* don't cache failures: clear the slot so the next call can retry */
+    p.catch(() => { if (state.urls[i] === p) state.urls[i] = null; });
+    state.urls[i] = p;
   }
   return state.urls[i];
 }
@@ -431,7 +444,11 @@ async function openBook(book) {
 }
 
 function closeBook() {
-  for (const u of state.urls || []) if (u) URL.revokeObjectURL(u);
+  ++renderGen; /* invalidate any in-flight render continuation */
+  for (const u of state.urls || []) {
+    /* state.urls may hold in-flight promises; only revoke settled object URLs */
+    if (u && typeof u === "string") URL.revokeObjectURL(u);
+  }
   state.book = null; state.urls = []; state.guided = null;
   $("#reader").hidden = true;
   $("#landing").hidden = false;
@@ -459,6 +476,7 @@ function showHint(text) {
 
 async function render() {
   if (!state.book) return;
+  ++renderGen;
   stage.className = "mode-" + state.mode;
   stage.innerHTML = "";
   state.guided = null;
@@ -470,8 +488,10 @@ async function render() {
 }
 
 async function renderPage() {
+  const gen = renderGen;
   const img = new Image();
   img.src = await pageURL(state.page);
+  if (staleRender(gen)) return;
   stage.appendChild(img);
   updatePos(`${state.page + 1} / ${state.book.pages.length}`);
   setProgress((state.page + 1) / state.book.pages.length);
@@ -479,6 +499,7 @@ async function renderPage() {
 }
 
 async function renderWebtoon() {
+  const gen = renderGen;
   const col = document.createElement("div");
   col.className = "col";
   stage.appendChild(col);
@@ -486,9 +507,11 @@ async function renderWebtoon() {
     const img = new Image();
     img.loading = "lazy";
     img.src = await pageURL(i);
+    if (staleRender(gen)) return;
     img.dataset.index = i;
     col.appendChild(img);
   }
+  if (staleRender(gen)) return;
   updatePos(`${state.book.pages.length} pages`);
   const imgs = [...col.children];
   stage.onscroll = () => {
@@ -527,13 +550,16 @@ async function panelsFor(i, img) {
 }
 
 async function renderGuided() {
+  const gen = renderGen;
   const viewport = document.createElement("div");
   viewport.className = "guided-viewport";
   const canvas = document.createElement("div");
   canvas.className = "guided-canvas";
   const img = new Image();
   img.src = await pageURL(state.page);
+  if (staleRender(gen)) return;
   await img.decode();
+  if (staleRender(gen)) return;
   canvas.appendChild(img);
   const dim = document.createElement("div");
   dim.className = "guided-dim";
@@ -541,6 +567,7 @@ async function renderGuided() {
   viewport.appendChild(canvas);
   stage.appendChild(viewport);
   const rects = await panelsFor(state.page, img);
+  if (staleRender(gen)) return;
   state.panel = Math.min(state.panel, rects.length - 1);
   state.guided = { viewport, canvas, dim, img, rects };
   frameCurrentPanel(false);
