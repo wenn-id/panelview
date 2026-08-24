@@ -59,7 +59,14 @@ const userDataDir = mkdtempSync(join(os.tmpdir(), "panelview-ci-"));
 const chrome = spawn(chromePath, [
   "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
   `--user-data-dir=${userDataDir}`, "--remote-debugging-port=0", "about:blank",
-], { stdio: "ignore" });
+], { stdio: ["ignore", "ignore", "pipe"] });
+
+/* keep Chrome's own stderr so a startup failure is diagnosable in CI logs */
+let chromeErr = "";
+chrome.stderr.setEncoding("utf8");
+chrome.stderr.on("data", (c) => { chromeErr += c; });
+let chromeExit = null;
+chrome.on("exit", (code, signal) => { chromeExit = signal || code; });
 
 /* runs on normal exit AND on an uncaught throw, so a crashed Chrome can't leak
    a temp profile or hold the port */
@@ -81,15 +88,24 @@ const getJson = (url) => new Promise((ok, bad) => {
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/* CI runners are slower than a laptop: give Chrome up to 60s to publish
+   DevToolsActivePort, and report why it never did. */
 let cdpEndpoint = null;
-for (let i = 0; i < 100 && !cdpEndpoint; i++) {
+for (let i = 0; i < 600 && !cdpEndpoint; i++) {
+  if (chromeExit !== null) break;
   try {
     const [portLine] = (await readFile(join(userDataDir, "DevToolsActivePort"), "utf8")).split("\n");
     const version = await getJson(`http://127.0.0.1:${portLine}/json/version`);
     cdpEndpoint = version.webSocketDebuggerUrl;
   } catch { await sleep(100); }
 }
-if (!cdpEndpoint) { console.error("Chrome DevTools endpoint never came up"); process.exit(2); }
+if (!cdpEndpoint) {
+  console.error(chromeExit !== null
+    ? `Chrome exited (${chromeExit}) before publishing a DevTools endpoint`
+    : "Chrome DevTools endpoint never came up within 60s");
+  if (chromeErr.trim()) console.error("--- chrome stderr ---\n" + chromeErr.trim());
+  process.exit(2);
+}
 
 const ws = new WebSocket(cdpEndpoint);
 await new Promise((ok, bad) => { ws.onopen = ok; ws.onerror = bad; });
