@@ -389,6 +389,10 @@ const state = {
   guided: null,
 };
 
+/* bumped by every render()/close so stale async continuations can bail out */
+let renderGen = 0;
+const staleRender = (gen) => gen !== renderGen || !state.book;
+
 function bookKey(book) {
   return "panelview:" + (book.resumeId || book.title) + ":" + book.pages.length;
 }
@@ -440,6 +444,7 @@ async function openBook(book) {
 }
 
 function closeBook() {
+  ++renderGen; /* invalidate any in-flight render continuation */
   for (const u of state.urls || []) {
     /* state.urls may hold in-flight promises; only revoke settled object URLs */
     if (u && typeof u === "string") URL.revokeObjectURL(u);
@@ -471,6 +476,7 @@ function showHint(text) {
 
 async function render() {
   if (!state.book) return;
+  ++renderGen;
   stage.className = "mode-" + state.mode;
   stage.innerHTML = "";
   state.guided = null;
@@ -482,8 +488,10 @@ async function render() {
 }
 
 async function renderPage() {
+  const gen = renderGen;
   const img = new Image();
   img.src = await pageURL(state.page);
+  if (staleRender(gen)) return;
   stage.appendChild(img);
   updatePos(`${state.page + 1} / ${state.book.pages.length}`);
   setProgress((state.page + 1) / state.book.pages.length);
@@ -491,6 +499,7 @@ async function renderPage() {
 }
 
 async function renderWebtoon() {
+  const gen = renderGen;
   const col = document.createElement("div");
   col.className = "col";
   stage.appendChild(col);
@@ -498,9 +507,11 @@ async function renderWebtoon() {
     const img = new Image();
     img.loading = "lazy";
     img.src = await pageURL(i);
+    if (staleRender(gen)) return;
     img.dataset.index = i;
     col.appendChild(img);
   }
+  if (staleRender(gen)) return;
   updatePos(`${state.book.pages.length} pages`);
   const imgs = [...col.children];
   stage.onscroll = () => {
@@ -539,13 +550,16 @@ async function panelsFor(i, img) {
 }
 
 async function renderGuided() {
+  const gen = renderGen;
   const viewport = document.createElement("div");
   viewport.className = "guided-viewport";
   const canvas = document.createElement("div");
   canvas.className = "guided-canvas";
   const img = new Image();
   img.src = await pageURL(state.page);
+  if (staleRender(gen)) return;
   await img.decode();
+  if (staleRender(gen)) return;
   canvas.appendChild(img);
   const dim = document.createElement("div");
   dim.className = "guided-dim";
@@ -553,6 +567,7 @@ async function renderGuided() {
   viewport.appendChild(canvas);
   stage.appendChild(viewport);
   const rects = await panelsFor(state.page, img);
+  if (staleRender(gen)) return;
   state.panel = Math.min(state.panel, rects.length - 1);
   state.guided = { viewport, canvas, dim, img, rects };
   frameCurrentPanel(false);

@@ -259,6 +259,19 @@
     closeReader();
     await new Promise((r) => setTimeout(r, 0));
     t("settled pageURL revoked on close", created.length === 1 && revoked.includes(settledURL));
+
+    /* stale render continuation must not touch DOM after close/reopen */
+    const renderPageFn = window.eval("renderPage");
+    const stageEl = document.getElementById("stage");
+    created.length = 0; revoked.length = 0; getCalls = 0;
+    const domBefore = stageEl.childElementCount;
+    resetReaderState({ title: "race-stale", pages: [slowPage] });
+    const staleRender = renderPageFn();
+    closeReader();
+    resetReaderState({ title: "race-new", pages: [slowPage] }); /* immediate reopen */
+    let staleThrew = false;
+    try { await staleRender; } catch { staleThrew = true; }
+    t("stale render continuation bails after close/reopen", !staleThrew && stageEl.childElementCount === domBefore);
   } finally {
     URL.createObjectURL = realCreate;
     URL.revokeObjectURL = realRevoke;
