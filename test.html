@@ -217,6 +217,54 @@
   t("explicit project title wins", explicitTitleBook.title === "Sunlight Run");
   t("explicit title preserves existing resume key", bookKey(explicitTitleBook) === "panelview:Sunlight Run:1");
 
+  /* pageURL: concurrent calls must share one object URL, not leak duplicates */
+  const pageURL = window.eval("pageURL");
+  const readerState = window.eval("state");
+  const closeReader = window.eval("closeBook");
+  const resetReaderState = (book) => {
+    if (!book) { closeReader(); return; }
+    readerState.book = book;
+    readerState.urls = new Array(book.pages.length);
+    readerState.panelCache = new Array(book.pages.length);
+    readerState.guided = null;
+  };
+  let getCalls = 0;
+  const created = [];
+  const realCreate = URL.createObjectURL;
+  const realRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = (b) => { const u = realCreate.call(URL, b); created.push(u); return u; };
+  const revoked = [];
+  URL.revokeObjectURL = (u) => { revoked.push(u); return realRevoke.call(URL, u); };
+  try {
+    const slowPage = { get: async () => { getCalls++; await new Promise((r) => setTimeout(r, 20)); return new Blob(["page"]); } };
+    resetReaderState({ title: "race", pages: [slowPage] });
+    const urls = await Promise.all([pageURL(0), pageURL(0), pageURL(0)]);
+    t("concurrent pageURL fetches blob once", getCalls === 1);
+    t("concurrent pageURL returns one shared URL", urls[0] === urls[1] && urls[1] === urls[2]);
+    t("concurrent pageURL creates no duplicate object URLs", created.length === 1);
+    t("cached pageURL reuses the same URL", (await pageURL(0)) === urls[0] && created.length === 1);
+
+    /* closing while a fetch is in flight must still revoke the created URL */
+    created.length = 0; revoked.length = 0; getCalls = 0;
+    resetReaderState({ title: "race-close", pages: [slowPage] });
+    const inFlight = pageURL(0);
+    closeReader();
+    const lateURL = await inFlight;
+    t("in-flight pageURL revoked after close", created.length === 1 && revoked.includes(lateURL));
+
+    /* normal close after settled fetch must revoke the stored URL */
+    created.length = 0; revoked.length = 0;
+    resetReaderState({ title: "race-settled", pages: [slowPage] });
+    const settledURL = await pageURL(0);
+    closeReader();
+    await new Promise((r) => setTimeout(r, 0));
+    t("settled pageURL revoked on close", created.length === 1 && revoked.includes(settledURL));
+  } finally {
+    URL.createObjectURL = realCreate;
+    URL.revokeObjectURL = realRevoke;
+    resetReaderState(null);
+  }
+
   const failed = results.filter((r) => r.startsWith("FAIL")).length;
   document.getElementById("out").textContent = results.join("\n") + `\n\n${results.length - failed}/${results.length} passed`;
   document.title = failed ? "FAIL" : "PASS";

@@ -384,7 +384,7 @@ const state = {
   mode: "page",
   page: 0,
   panel: 0,
-  urls: [],       /* object URLs per page */
+  urls: [],       /* object URL or in-flight promise per page */
   panelCache: [], /* resolved panel rects per page (image coords) */
   guided: null,
 };
@@ -394,9 +394,18 @@ function bookKey(book) {
 }
 
 async function pageURL(i) {
+  /* store the promise so concurrent callers share one fetch + one object URL */
   if (!state.urls[i]) {
-    const blob = await state.book.pages[i].get();
-    state.urls[i] = URL.createObjectURL(blob);
+    const p = state.book.pages[i].get().then((blob) => {
+      const url = URL.createObjectURL(blob);
+      if (state.urls[i] === p) state.urls[i] = url;
+      /* closed (or reopened) while in flight: nothing will revoke this slot later */
+      else URL.revokeObjectURL(url);
+      return url;
+    });
+    /* don't cache failures: clear the slot so the next call can retry */
+    p.catch(() => { if (state.urls[i] === p) state.urls[i] = null; });
+    state.urls[i] = p;
   }
   return state.urls[i];
 }
@@ -431,7 +440,10 @@ async function openBook(book) {
 }
 
 function closeBook() {
-  for (const u of state.urls || []) if (u) URL.revokeObjectURL(u);
+  for (const u of state.urls || []) {
+    /* state.urls may hold in-flight promises; only revoke settled object URLs */
+    if (u && typeof u === "string") URL.revokeObjectURL(u);
+  }
   state.book = null; state.urls = []; state.guided = null;
   $("#reader").hidden = true;
   $("#landing").hidden = false;
