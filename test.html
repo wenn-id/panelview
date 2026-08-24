@@ -184,6 +184,24 @@
   const csMultiBook = await bookFromFileMap(csMulti, "fb");
   t("shallowest adjacent manifest wins", csMultiBook.comicSol && csMultiBook.title === "root" && csMultiBook.pages[0].panels.length === 3);
 
+  /* schema_version gate: missing → legacy, known → silent, unknown → non-blocking banner */
+  const withSchema = (v) => {
+    const m = new Map();
+    m.set("project.json", async () => new Blob([JSON.stringify(
+      v === undefined ? { project_id:"sv", settings:{page_width:1600,page_height:2400} }
+      : { project_id:"sv", schema_version:v, settings:{page_width:1600,page_height:2400} })]));
+    m.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"full-page",panels:[{rect:{x:1,y:2,width:9,height:9}}]}]})]));
+    m.set("pages/page-001.png", async () => new Blob(["fake"]));
+    return m;
+  };
+  const legacyBook = await bookFromFileMap(withSchema(), "fb");
+  t("missing schema_version → legacy note", legacyBook.comicSol && legacyBook.schemaNote === "legacy" && legacyBook.pages.length === 1);
+  const knownBook = await bookFromFileMap(withSchema("1.0"), "fb");
+  t("known schema_version stays silent", knownBook.comicSol && !("schemaNote" in knownBook) && knownBook.pages[0].panels[0].width === 9);
+  const unknownBook = await bookFromFileMap(withSchema("9.9"), "fb");
+  t("unknown schema_version still renders", unknownBook.comicSol && unknownBook.pages[0].panels.length === 1);
+  t("unknown schema_version flagged", unknownBook.schemaNote === "Project schema 9.9 has not been tested with this reader; rendering may be off.");
+
   const failed = results.filter((r) => r.startsWith("FAIL")).length;
   document.getElementById("out").textContent = results.join("\n") + `\n\n${results.length - failed}/${results.length} passed`;
   document.title = failed ? "FAIL" : "PASS";
