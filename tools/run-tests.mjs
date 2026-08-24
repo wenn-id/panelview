@@ -61,6 +61,14 @@ const chrome = spawn(chromePath, [
   `--user-data-dir=${userDataDir}`, "--remote-debugging-port=0", "about:blank",
 ], { stdio: "ignore" });
 
+/* runs on normal exit AND on an uncaught throw, so a crashed Chrome can't leak
+   a temp profile or hold the port */
+process.on("exit", () => {
+  chrome.kill("SIGKILL");
+  try { rmSync(userDataDir, { recursive: true, force: true, maxRetries: 5 }); } catch {}
+  server.close();
+});
+
 const getJson = (url) => new Promise((ok, bad) => {
   const req = request(url, (res) => {
     let body = "";
@@ -94,15 +102,29 @@ ws.onmessage = (event) => {
   if (msg.method === "Runtime.exceptionThrown") logs.push("EXCEPTION " + (msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text));
   if (msg.method === "Runtime.consoleAPICalled" && msg.params.type === "error") logs.push("CONSOLE error " + msg.params.args.map((a) => a.value ?? a.description ?? "").join(" "));
 };
+let cdpClosed = false;
+/* a dead Chrome must never leave a request awaiting its reply forever */
+ws.onclose = () => {
+  cdpClosed = true;
+  for (const resolve of pending.values()) resolve({ error: { message: "CDP connection closed" } });
+  pending.clear();
+};
+const assertOk = (resp, what) => {
+  if (resp.error || !resp.result) throw new Error(`CDP ${what} failed: ${resp.error?.message || "no result"}`);
+};
 const send = (method, params = {}, sessionId) => new Promise((ok) => {
+  if (cdpClosed) { ok({ error: { message: "CDP connection closed" } }); return; }
   const id = ++nextId;
   pending.set(id, ok);
   ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
 });
 
 const targets = await send("Target.getTargets");
+assertOk(targets, "Target.getTargets");
 const target = targets.result.targetInfos.find((t) => t.type === "page");
+if (!target) throw new Error("Chrome exposed no page target");
 const attached = await send("Target.attachToTarget", { targetId: target.targetId, flatten: true });
+assertOk(attached, "Target.attachToTarget");
 const session = attached.result.sessionId;
 await send("Runtime.enable", {}, session);
 await send("Page.enable", {}, session);
@@ -114,6 +136,7 @@ for (const page of pages) {
   let report = "";
   for (let i = 0; i < 120; i++) {
     await sleep(500);
+    if (cdpClosed) throw new Error("Chrome exited before the page reported a result");
     const evaluated = await send("Runtime.evaluate", {
       expression: "document.title + '\\n' + (document.getElementById('out')?.textContent || '')",
       returnByValue: true,
@@ -138,7 +161,4 @@ for (const page of pages) {
   if (logs.length) console.log("--- page errors ---\n" + logs.join("\n"));
 }
 
-chrome.kill("SIGKILL");
-try { rmSync(userDataDir, { recursive: true, force: true, maxRetries: 5 }); } catch {}
-server.close();
 process.exit(failures ? 1 : 0);
