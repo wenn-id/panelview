@@ -49,7 +49,7 @@ Then drop in:
 
 [Comic Sol](https://github.com/wenn-id/comic-sol) is an agent skill that turns a story prompt into a finished comic. Its storyboards carry the exact pixel rect of every panel (`plan/storyboard.json` → `pages[].panels[].rect`), and PanelView reads those rects directly, so any Comic Sol output folder becomes a cinematic guided-view experience with zero configuration. For manifests without rects, a JS port of Comic Sol's layout math (`layout_rects`) acts as fallback geometry.
 
-**Tested schema:** `project.json` `schema_version` `"1.0"`. Missing versions are treated as legacy; untested future versions still render, with a non-blocking notice that framing may be off. See the [viewer contract](docs/viewer-contract.md) for the consumed manifest fields and compatibility matrix.
+**Tested schema:** `project.json` `schema_version` `"1.0"`. Missing versions are treated as legacy; untested future versions still render, with a non-blocking notice that framing may be off. See the [viewer contract](docs/viewer-contract.md) for the consumed manifest fields and compatibility matrix. Titles fall back to a prettified `project_id`, and the story-plan `logline` shows as a toolbar subtitle when present.
 
 ## Tests
 

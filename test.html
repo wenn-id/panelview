@@ -6,7 +6,7 @@
 <div id="landing" hidden><div id="dropzone"></div><button id="btn-demo"></button>
 <input type="file" id="file-input" hidden><input type="file" id="dir-input" hidden></div>
 <div id="reader" hidden><div id="progress"><div id="progress-fill"></div></div>
-<div id="toolbar"><button id="btn-close"></button><span id="book-title"></span>
+<div id="toolbar"><button id="btn-close"></button><div id="book-meta"><span id="book-title"></span><span id="book-subtitle" hidden></span></div>
 <nav id="modes"><button data-mode="page"></button><button data-mode="webtoon"></button><button data-mode="guided"></button></nav>
 <span id="pos"></span><button id="btn-fs"></button></div><div id="stage"></div><div id="hint"></div></div>
 <script src="app.js"></script>
@@ -182,7 +182,7 @@
   csMulti.set("project.json", async () => new Blob([JSON.stringify({project_id:"root",settings:{page_width:1600,page_height:2400}})]));
   csMulti.set("pages/page-001.png", async () => new Blob(["fake"]));
   const csMultiBook = await bookFromFileMap(csMulti, "fb");
-  t("shallowest adjacent manifest wins", csMultiBook.comicSol && csMultiBook.title === "root" && csMultiBook.pages[0].panels.length === 3);
+  t("shallowest adjacent manifest wins", csMultiBook.comicSol && csMultiBook.title === "Root" && csMultiBook.pages[0].panels.length === 3);
 
   /* schema_version gate: missing → legacy, known → silent, unknown → non-blocking banner */
   const withSchema = (v) => {
@@ -201,6 +201,19 @@
   const unknownBook = await bookFromFileMap(withSchema("9.9"), "fb");
   t("unknown schema_version still renders", unknownBook.comicSol && unknownBook.pages[0].panels.length === 1);
   t("unknown schema_version flagged", unknownBook.schemaNote === "Project schema 9.9 has not been tested with this reader; rendering may be off.");
+
+  /* title resolution: explicit title wins; slug is prettified; logline becomes subtitle */
+  const titled = new Map();
+  titled.set("project.json", async () => new Blob([JSON.stringify({project_id:"sunlight-courier",settings:{page_width:1600,page_height:2400}})]));
+  titled.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"full-page",panels:[{}]}]})]));
+  titled.set("plan/story-plan.json", async () => new Blob([JSON.stringify({logline:"A courier delivers sunlight to an underground city."})]));
+  titled.set("pages/page-001.png", async () => new Blob(["fake"]));
+  const titledBook = await bookFromFileMap(titled, "Fallback");
+  t("project_id slug becomes title", titledBook.title === "Sunlight Courier");
+  t("story-plan logline becomes subtitle", titledBook.subtitle === "A courier delivers sunlight to an underground city.");
+  titled.set("project.json", async () => new Blob([JSON.stringify({title:"Sunlight Run",project_id:"sunlight-courier",settings:{page_width:1600,page_height:2400}})]));
+  const explicitTitleBook = await bookFromFileMap(titled, "Fallback");
+  t("explicit project title wins", explicitTitleBook.title === "Sunlight Run");
 
   const failed = results.filter((r) => r.startsWith("FAIL")).length;
   document.getElementById("out").textContent = results.join("\n") + `\n\n${results.length - failed}/${results.length} passed`;
