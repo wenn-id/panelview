@@ -636,9 +636,10 @@ async function renderMotion() {
   canvas.style.width = `${state.book.pages[state.page].srcW}px`;
   canvas.style.height = `${state.book.pages[state.page].srcH}px`;
   for (const mp of page.motionPanels) {
-    const url = URL.createObjectURL(await mp.clean());
+    const blob = await mp.clean();
+    if (staleRender(gen)) { URL.revokeObjectURL(URL.createObjectURL(blob)); return; }
+    const url = URL.createObjectURL(blob);
     state.motionUrls.push(url);
-    if (staleRender(gen)) return;
     const panel = document.createElement("div");
     panel.className = "motion-panel";
     Object.assign(panel.style, { left: `${mp.rect.x}px`, top: `${mp.rect.y}px`, width: `${mp.rect.width}px`, height: `${mp.rect.height}px` });
@@ -733,6 +734,7 @@ async function preload(i) {
 
 async function setMode(mode) {
   if (!state.book || state.mode === mode) return;
+  if (!modeSupported(state.book, mode)) return;
   state.mode = mode;
   await render();
 }

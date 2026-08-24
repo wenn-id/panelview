@@ -338,6 +338,27 @@
     let staleMotionThrew = false;
     try { await staleMotion; } catch { staleMotionThrew = true; }
     t("stale motion continuation bails after close/reopen", !staleMotionThrew && stageEl2.childElementCount === motionDomBefore);
+    /* review findings: a clean URL created after close must be revoked, not orphaned */
+    created.length = 0; revoked.length = 0;
+    resetReaderState(slowMotionBook);
+    readerState.mode = "motion";
+    const lateRender = renderMotionFn();
+    closeReader();
+    await lateRender.catch(() => {});
+    const lateCleanURL = created[created.length - 1];
+    t("late clean URL is released after stale bail",
+      lateCleanURL !== undefined && revoked.includes(lateCleanURL) && !(readerState.motionUrls || []).includes(lateCleanURL));
+
+    readerState.mode = "page";
+    const setModeFn = window.eval("setMode");
+    resetReaderState(missingMotionBook);
+    await setModeFn("motion");
+    t("unsupported motion mode is refused by setMode", readerState.mode === "page");
+    closeReader();
+
+    const cssText = await (await fetch("style.css")).text();
+    const canvasRule = cssText.match(/\.motion-canvas\s*\{[^}]*\}/);
+    t("motion canvas keeps source-page coordinates", !!canvasRule && !/max-(width|height)/.test(canvasRule[0]));
   } finally {
     URL.createObjectURL = realCreate;
     URL.revokeObjectURL = realRevoke;

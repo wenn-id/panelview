@@ -158,15 +158,13 @@ a:hover { text-decoration: underline; }
 #stage.mode-motion { background: #000; }
 .motion-viewport {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
 .motion-canvas {
-  position: relative;
+  position: absolute; top: 0; left: 0;
   transform-origin: 0 0;
   transition: transform 0.85s cubic-bezier(0.33, 0.0, 0.15, 1);
   will-change: transform;
-  max-width: 100%; max-height: 100%;
 }
 .motion-panel { position: absolute; overflow: hidden; }
 .motion-panel img { display: block; width: 100%; height: 100%; object-fit: cover; }
