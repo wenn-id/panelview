@@ -154,6 +154,40 @@ a:hover { text-decoration: underline; }
 #stage.mode-webtoon .col { max-width: 820px; margin: 0 auto; }
 #stage.mode-webtoon img { width: 100%; display: block; }
 
+/* motion-comic mode */
+#stage.mode-motion { background: #000; }
+.motion-viewport {
+  position: absolute; inset: 0;
+  overflow: hidden;
+}
+.motion-canvas {
+  position: absolute; top: 0; left: 0;
+  transform-origin: 0 0;
+  transition: transform 0.85s cubic-bezier(0.33, 0.0, 0.15, 1);
+  will-change: transform;
+}
+.motion-panel { position: absolute; overflow: hidden; }
+.motion-panel img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* text rides on the clean art in page coordinates, so sizes are page-scale */
+.motion-text {
+  position: absolute; margin: 0; max-width: 46%;
+  padding: 14px 20px; border-radius: 18px;
+  font-size: 34px; line-height: 1.28; color: #fff;
+  background: #000000b3; text-shadow: 0 2px 6px #000a;
+}
+.motion-text[data-speaker] { background: #101010d9; }
+.motion-text-top-left     { top: 4%; left: 4%; }
+.motion-text-top-center   { top: 4%; left: 50%; transform: translateX(-50%); }
+.motion-text-top-right    { top: 4%; right: 4%; }
+.motion-text-middle-left  { top: 50%; left: 4%; transform: translateY(-50%); }
+.motion-text-middle-right { top: 50%; right: 4%; transform: translateY(-50%); }
+.motion-text-bottom-left  { bottom: 4%; left: 4%; }
+.motion-text-bottom-center{ bottom: 4%; left: 50%; transform: translateX(-50%); }
+.motion-text-bottom-right { bottom: 4%; right: 4%; }
+/* only the focused panel's art and text are lit */
+.motion-panel { opacity: 0.28; transition: opacity 0.5s ease; }
+.motion-panel.current { opacity: 1; }
+
 /* guided mode */
 #stage.mode-guided { background: #000; }
 .guided-viewport {

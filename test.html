@@ -217,6 +217,26 @@
   t("explicit project title wins", explicitTitleBook.title === "Sunlight Run");
   t("explicit title preserves existing resume key", bookKey(explicitTitleBook) === "panelview:Sunlight Run:1");
 
+  /* motion-comic contract: clean panel sources and storyboard text are retained */
+  const motion = new Map();
+  motion.set("project.json", async () => new Blob([JSON.stringify({project_id:"motion",settings:{page_width:1600,page_height:2400}})]));
+  motion.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"full-page",panels:[{id:"p01-01",rect:{x:10,y:20,width:100,height:200},text:[{id:"t1",content:"One light remained.",kind:"caption",anchor:"top-left"}]}]}]})]));
+  motion.set("pages/page-001.png", async () => new Blob(["lettered"]));
+  motion.set("panels/p01-01/clean.png", async () => new Blob(["clean"]));
+  const motionBook = await bookFromFileMap(motion, "Fallback");
+  t("motion book retains clean panel metadata", motionBook.motionComic && Array.isArray(motionBook.pages[0].motionPanels) && motionBook.pages[0].motionPanels.length === 1 && motionBook.pages[0].motionPanels[0].id === "p01-01");
+  t("motion book retains overlay text metadata", motionBook.motionComic && motionBook.pages[0].motionPanels?.[0]?.text?.[0]?.content === "One light remained.");
+  const motionMissing = new Map(motion);
+  motionMissing.delete("panels/p01-01/clean.png");
+  const missingMotionBook = await bookFromFileMap(motionMissing, "Fallback");
+  t("missing clean panel opts into safe fallback", missingMotionBook.motionComic === false);
+
+  /* motion mode is only offered when clean art exists for every panel */
+  const modeSupported = window.eval("modeSupported");
+  t("motion mode needs clean panel art", modeSupported(motionBook, "motion") === true);
+  t("motion mode refused without clean art", modeSupported(missingMotionBook, "motion") === false);
+  t("classic modes stay available", ["page", "webtoon", "guided"].every((m) => modeSupported(missingMotionBook, m)));
+
   /* pageURL: concurrent calls must share one object URL, not leak duplicates */
   const pageURL = window.eval("pageURL");
   const readerState = window.eval("state");
@@ -227,6 +247,8 @@
     readerState.urls = new Array(book.pages.length);
     readerState.panelCache = new Array(book.pages.length);
     readerState.guided = null;
+    readerState.motion = null;
+    readerState.motionUrls = [];
   };
   let getCalls = 0;
   const created = [];
@@ -272,6 +294,71 @@
     let staleThrew = false;
     try { await staleRender; } catch { staleThrew = true; }
     t("stale render continuation bails after close/reopen", !staleThrew && stageEl.childElementCount === domBefore);
+
+    /* motion render: clean art + overlay text, and no leaked object URLs */
+    const renderMotionFn = window.eval("renderMotion");
+    const stageEl2 = document.getElementById("stage");
+    created.length = 0; revoked.length = 0;
+    resetReaderState(motionBook);
+    readerState.mode = "motion";
+    await renderMotionFn();
+    const motionImgs = stageEl2.querySelectorAll(".motion-panel img");
+    const motionTexts = [...stageEl2.querySelectorAll(".motion-text")].map((el) => el.textContent);
+    t("motion render draws one clean image per panel", motionImgs.length === 1 && created.length === 1 && motionImgs[0].src === created[0]);
+    t("motion render overlays storyboard text", motionTexts.join("|") === "One light remained.");
+    t("motion overlay text is escaped, not markup", stageEl2.querySelector(".motion-text").children.length === 0);
+    closeReader();
+    t("motion clean URLs revoked on close", revoked.includes(created[0]));
+
+    /* re-render must not leak the previous page's clean object URLs */
+    created.length = 0; revoked.length = 0;
+    resetReaderState(motionBook);
+    readerState.mode = "motion";
+    await renderMotionFn();
+    const firstClean = created[0];
+    await window.eval("render")();
+    t("motion re-render revokes prior clean URLs", revoked.includes(firstClean));
+    closeReader();
+
+    /* stale motion continuation must not write into a reopened book */
+    const slowClean = async () => { await new Promise((r) => setTimeout(r, 20)); return new Blob(["clean"]); };
+    const slowMotionBook = {
+      title: "motion-stale",
+      motionComic: true,
+      pages: [{ get: async () => new Blob(["page"]), srcW: 1600, srcH: 2400, panels: null,
+        motionPanels: [{ id: "p01-01", rect: { x: 10, y: 20, width: 100, height: 200 }, text: [], clean: slowClean }] }],
+    };
+    created.length = 0; revoked.length = 0;
+    const motionDomBefore = stageEl2.childElementCount;
+    resetReaderState(slowMotionBook);
+    readerState.mode = "motion";
+    const staleMotion = renderMotionFn();
+    closeReader();
+    resetReaderState(slowMotionBook); /* immediate reopen */
+    let staleMotionThrew = false;
+    try { await staleMotion; } catch { staleMotionThrew = true; }
+    t("stale motion continuation bails after close/reopen", !staleMotionThrew && stageEl2.childElementCount === motionDomBefore);
+    /* review findings: a clean URL created after close must be revoked, not orphaned */
+    created.length = 0; revoked.length = 0;
+    resetReaderState(slowMotionBook);
+    readerState.mode = "motion";
+    const lateRender = renderMotionFn();
+    closeReader();
+    await lateRender.catch(() => {});
+    const lateCleanURL = created[created.length - 1];
+    t("late clean URL is released after stale bail",
+      lateCleanURL !== undefined && revoked.includes(lateCleanURL) && !(readerState.motionUrls || []).includes(lateCleanURL));
+
+    readerState.mode = "page";
+    const setModeFn = window.eval("setMode");
+    resetReaderState(missingMotionBook);
+    await setModeFn("motion");
+    t("unsupported motion mode is refused by setMode", readerState.mode === "page");
+    closeReader();
+
+    const cssText = await (await fetch("style.css")).text();
+    const canvasRule = cssText.match(/\.motion-canvas\s*\{[^}]*\}/);
+    t("motion canvas keeps source-page coordinates", !!canvasRule && !/max-(width|height)/.test(canvasRule[0]));
   } finally {
     URL.createObjectURL = realCreate;
     URL.revokeObjectURL = realRevoke;
