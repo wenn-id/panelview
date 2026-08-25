@@ -9,8 +9,8 @@
 <div id="toolbar"><button id="btn-close"></button><div id="book-meta"><span id="book-title"></span><span id="book-subtitle" hidden></span></div>
 <nav id="modes"><button data-mode="page"></button><button data-mode="webtoon"></button><button data-mode="guided"></button></nav>
 <span id="pos"></span><button id="btn-direction"></button><button id="btn-thumbs"></button><button id="btn-fs"></button></div><div id="stage"></div><div id="thumbs" hidden></div><div id="hint"></div></div>
-<script src="app.js"></script>
-<script>
+<script type="module" src="main.js"></script>
+<script type="module">
 (async () => {
   const { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey } = window.__panelview;
   const results = [];
@@ -626,6 +626,15 @@
     const cssText = await (await fetch("style.css")).text();
     const canvasRule = cssText.match(/\.motion-canvas\s*\{[^}]*\}/);
     t("motion canvas keeps source-page coordinates", !!canvasRule && !/max-(width|height)/.test(canvasRule[0]));
+
+    /* module import contract: real DOM wiring drives imported reader exports */
+    resetReaderState(threePageBook);
+    readerState.mode = "page";
+    readerState.page = 0;
+    stageEl.replaceChildren();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    t("real keyboard handler advances via imported intent", readerState.page === 1);
+    closeReader();
   } finally {
     URL.createObjectURL = realCreate;
     URL.revokeObjectURL = realRevoke;
@@ -648,11 +657,17 @@
     t("service worker excludes runtime comic data", !/cache\.put\(request|cache\.add\(request|file-input|blob:/.test(swText));
     t("service worker uses offline-first shell fallback", /caches\.match\(request\)/.test(swText) && /network|fetch\(request\)/.test(swText));
     t("service worker installs the explicit allowlist", /cache\.addAll\(CACHE_ASSETS\)/.test(swText));
+    t("service worker caches every module layer", ["main.js", "zip.js", "detect.js", "comicsol.js", "reader.js"].every((name) => swText.includes(`./${name}`)));
     t("service worker never writes fetched runtime requests", !/cache\.put\(request|cache\.add\(request/.test(swText));
   }
   const indexText = await (await fetch("index.html")).text();
   t("index links the web app manifest", /<link rel="manifest" href="manifest\.webmanifest">/.test(indexText));
-  const appShellText = await (await fetch("app.js")).text();
+  t("index loads the zero-build module entry", /<script type="module" src="main\.js"><\/script>/.test(indexText) && !/<script src="app\.js"><\/script>/.test(indexText));
+  const appCompatText = await (await fetch("app.js")).text();
+  t("compatibility barrel imports main module", /import "\.\/main\.js"/.test(appCompatText));
+  const appShellText = await (await fetch("main.js")).text();
+  t("app module imports reader module", /from "\.\/reader\.js"/.test(appShellText));
+  t("main imports all zero-build layers", ["zip.js", "detect.js", "comicsol.js", "reader.js"].every((name) => appShellText.includes(`./${name}`)));
   t("app registers the service worker", /navigator\.serviceWorker\.register\("\.\/sw\.js"\)/.test(appShellText));
   t("registration is failure-tolerant", /navigator\.serviceWorker\.register\("\.\/sw\.js"\)\.catch/.test(appShellText));
 

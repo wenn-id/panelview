@@ -3,12 +3,18 @@ const CACHE_ASSETS = [
   "./",
   "./index.html",
   "./style.css",
-  "./app.js",
   "./manifest.webmanifest",
+  "./main.js",
+  "./zip.js",
+  "./detect.js",
+  "./comicsol.js",
+  "./reader.js",
+  "./app.js",
   "./demo/demo.json",
   "./demo/page-001.jpg",
   "./demo/page-002.jpg",
   "./demo/page-003.jpg",
+  "./sw.js",
 ];
 
 self.addEventListener("install", (event) => {
