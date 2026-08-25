@@ -10,6 +10,21 @@ function naturalCompare(a, b) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
+/* Cheap synchronous identity for resume storage; two 32-bit lanes keep the
+   key compact while making same-title/page-count collisions unlikely. */
+function resumeFingerprint(parts) {
+  let a = 0x811c9dc5, b = 0x9e3779b9;
+  for (const part of parts) {
+    const text = String(part) + "\u001f";
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      a ^= code; a = Math.imul(a, 0x01000193);
+      b ^= code + i; b = Math.imul(b, 0x85ebca6b);
+    }
+  }
+  return (a >>> 0).toString(16).padStart(8, "0") + (b >>> 0).toString(16).padStart(8, "0");
+}
+
 /* ---------------- minimal ZIP reader ----------------
    Supports stored (0) and deflate (8) via DecompressionStream.
    Inflation of any single entry is capped (default 512 MiB) so a small
@@ -44,6 +59,7 @@ async function readZip(blob, maxInflatedBytes = MAX_INFLATED_ENTRY_BYTES) {
     const method = cd.getUint16(p + 10, true);
     const compSize = cd.getUint32(p + 20, true);
     const uncompSize = cd.getUint32(p + 24, true);
+    const crc = cd.getUint32(p + 16, true);
     const nameLen = cd.getUint16(p + 28, true);
     const extraLen = cd.getUint16(p + 30, true);
     const commentLen = cd.getUint16(p + 32, true);
@@ -52,7 +68,7 @@ async function readZip(blob, maxInflatedBytes = MAX_INFLATED_ENTRY_BYTES) {
       throw new Error(ZIP64_UNSUPPORTED);
     }
     const name = nameDecoder.decode(new Uint8Array(cd.buffer, p + 46, nameLen));
-    if (!name.endsWith("/")) entries.push({ name, method, compSize, uncompSize, localOffset });
+    if (!name.endsWith("/")) entries.push({ name, method, compSize, uncompSize, crc, localOffset });
     p += 46 + nameLen + extraLen + commentLen;
   }
   async function extract(entry) {
@@ -234,10 +250,15 @@ async function bookFromFileMap(fileMap, fallbackTitle) {
   const imagePaths = paths.filter((p) => IMG_RE.test(p) && !p.split("/").some((seg) => seg.startsWith("__MACOSX") || seg.startsWith(".")));
   imagePaths.sort(naturalCompare);
   if (!imagePaths.length) throw new Error("No images found.");
+  const pages = imagePaths.map((p) => ({
+    get: fileMap.get(p),
+    panels: null,
+    resumeSource: fileMap.get(p)?.resumeSource || [p],
+  }));
   return {
     title: fallbackTitle,
     comicSol: false,
-    pages: imagePaths.map((p) => ({ get: fileMap.get(p), panels: null })),
+    pages,
   };
 }
 
@@ -269,6 +290,13 @@ function panelsFromStoryboard(sb, pw, ph) {
   }
   if (sb && sb.layout) return layoutRects(sb.layout, pw, ph);
   return null;
+}
+
+/* Stable per-page identity from the storyboard entry: number, layout, and
+   panel ids — regenerated books with new content hash differently. */
+function sbSignature(sb) {
+  const panels = Array.isArray(sb?.panels) ? sb.panels : [];
+  return [sb?.number ?? "", sb?.layout ?? "", panels.map((p) => p?.id || "").join(",")];
 }
 
 async function comicSolBook(fileMap, root, fallbackTitle) {
@@ -342,7 +370,15 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
         clean: cleanPath && fileMap.has(cleanPath) ? fileMap.get(cleanPath) : null,
       };
     }) : [];
-    return { get: fileMap.get(p), panels, motionPanels, srcW: pw, srcH: ph };
+    const source = fileMap.get(p)?.resumeSource || [p];
+    const cleanSources = Array.isArray(sb?.panels) ? sb.panels.flatMap((panel) => {
+      const id = typeof panel?.id === "string" ? panel.id : "";
+      if (!id) return [];
+      const cleanPath = `${root}panels/${id}/clean.png`;
+      return fileMap.get(cleanPath)?.resumeSource || [cleanPath];
+    }) : [];
+    return { get: fileMap.get(p), panels, motionPanels, srcW: pw, srcH: ph,
+      resumeSource: [...source, ...sbSignature(sb), ...cleanSources] };
   });
   /* motion-comic mode needs every panel: clean art + a rect to place it in */
   const motionComic = pages.every((page) => page.motionPanels.length > 0
@@ -370,7 +406,9 @@ function fileMapFromFiles(files) {
     const rel = (f.webkitRelativePath || f.name).split("/").slice(1).join("/") || f.name;
     /* strip the top-level folder name when present */
     const key = f.webkitRelativePath ? rel : f.name;
-    map.set(key, async () => f);
+    const getter = async () => f;
+    getter.resumeSource = [key, f.size, f.lastModified];
+    map.set(key, getter);
   }
   return map;
 }
@@ -387,7 +425,10 @@ async function fileMapFromZip(blob) {
   }
   const map = new Map();
   for (const e of zip.entries) {
-    map.set(e.name.slice(prefix.length), async () => zip.extract(e));
+    const key = e.name.slice(prefix.length);
+    const getter = async () => zip.extract(e);
+    getter.resumeSource = [key, e.compSize, e.uncompSize, e.crc];
+    map.set(key, getter);
   }
   return map;
 }
@@ -399,7 +440,7 @@ async function openInput(files) {
       const map = await fileMapFromZip(files[0]);
       book = await bookFromFileMap(map, files[0].name.replace(/\.(cbz|zip)$/i, ""));
     } else if (files.length === 1 && IMG_RE.test(files[0].name)) {
-      book = { title: files[0].name, comicSol: false, pages: [{ get: async () => files[0], panels: null }] };
+      book = { title: files[0].name, comicSol: false, pages: [{ get: async () => files[0], panels: null, path: files[0].name, size: files[0].size, lastModified: files[0].lastModified }] };
     } else {
       const map = fileMapFromFiles(files);
       const title = files[0].webkitRelativePath ? files[0].webkitRelativePath.split("/")[0] : "Comic";
@@ -420,7 +461,7 @@ async function openDemo() {
     const pages = meta.pages.map((p) => ({
       get: async () => await (await fetch("demo/" + p.image)).blob(),
       panels: layoutRects(p.layout, 1600, 2400),
-      srcW: 1600, srcH: 2400,
+      srcW: 1600, srcH: 2400, path: p.image,
     }));
     await openBook({ title: meta.title + " · demo", comicSol: true, pages });
   } catch (err) {
@@ -449,7 +490,24 @@ let renderGen = 0;
 const staleRender = (gen) => gen !== renderGen || !state.book;
 
 function bookKey(book) {
+  const sources = (book.pages || []).flatMap((page) => page.resumeSource || [page.path || "", page.size ?? ""]);
+  const prefix = "panelview:" + (book.resumeId || book.title) + ":" + book.pages.length;
+  return prefix + ":" + resumeFingerprint(sources);
+}
+
+function legacyBookKey(book) {
   return "panelview:" + (book.resumeId || book.title) + ":" + book.pages.length;
+}
+
+function loadResume(book) {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(bookKey(book)) || "null");
+    /* Legacy records (pre-fingerprint keys) are intentionally not adopted or
+       deleted: the old key is unscoped, so auto-migration could copy another
+       same-title book's progress. Users keep at most one stale record. */
+  } catch {}
+  return saved;
 }
 /* motion-comic mode exists only when every panel ships unlettered clean art */
 function modeSupported(book, mode) {
@@ -495,8 +553,7 @@ async function openBook(book) {
   $("#landing").hidden = true;
   $("#reader").hidden = false;
   /* resume */
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(bookKey(book)) || "null"); } catch {}
+  const saved = loadResume(book);
   state.mode = saved?.mode || (book.comicSol ? "guided" : "page");
   if (!modeSupported(book, state.mode)) state.mode = "guided";
   const motionButton = document.querySelector('#modes button[data-mode="motion"]');
@@ -864,4 +921,4 @@ window.addEventListener("resize", () => {
 });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, state, setMode, next, prev };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, state, setMode, next, prev };

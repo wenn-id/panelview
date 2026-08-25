@@ -286,12 +286,53 @@
   titled.set("pages/page-001.png", async () => new Blob(["fake"]));
   const titledBook = await bookFromFileMap(titled, "Fallback");
   t("project_id slug becomes title", titledBook.title === "Sunlight Courier");
-  t("prettified title preserves raw project_id resume key", bookKey(titledBook) === "panelview:sunlight-courier:1");
+  t("prettified title preserves raw project_id resume key", bookKey(titledBook).startsWith("panelview:sunlight-courier:1:") && /[0-9a-f]{16}$/.test(bookKey(titledBook)));
   t("story-plan logline becomes subtitle", titledBook.subtitle === "A courier delivers sunlight to an underground city.");
   titled.set("project.json", async () => new Blob([JSON.stringify({title:"Sunlight Run",project_id:"sunlight-courier",settings:{page_width:1600,page_height:2400}})]));
   const explicitTitleBook = await bookFromFileMap(titled, "Fallback");
   t("explicit project title wins", explicitTitleBook.title === "Sunlight Run");
-  t("explicit title preserves existing resume key", bookKey(explicitTitleBook) === "panelview:Sunlight Run:1");
+  t("explicit title preserves existing resume key", bookKey(explicitTitleBook).startsWith("panelview:Sunlight Run:1:"));
+  const resumeA = { title: "Same Book", pages: [{ path: "pages/page-001.png", size: 100 }] };
+  const resumeB = { title: "Same Book", pages: [{ path: "pages/page-001.png", size: 200 }] };
+  t("resume key separates same-title same-count books", bookKey(resumeA) !== bookKey(resumeB));
+
+  /* motion revisions: same page image and storyboard, different clean art */
+  const cleanVariant = (sizes) => {
+    const m = new Map();
+    m.set("project.json", async () => new Blob([JSON.stringify({project_id:"rev",settings:{page_width:1600,page_height:2400}})]));
+    m.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"full-page",panels:[{id:"p01-01",rect:{x:0,y:0,width:1600,height:2400}}]}]})]));
+    const page = async () => new Blob(["lettered"]);
+    page.resumeSource = ["pages/page-001.png", 10, 20];
+    m.set("pages/page-001.png", page);
+    const clean = async () => new Blob(["clean"]);
+    clean.resumeSource = ["panels/p01-01/clean.png", ...sizes];
+    m.set("panels/p01-01/clean.png", clean);
+    return m;
+  };
+  const revAMap = cleanVariant([31, 64]);
+  const revBMap = cleanVariant([31, 64]);
+  revBMap.get("panels/p01-01/clean.png").resumeSource[2] = 999;
+  const revA = await bookFromFileMap(revAMap, "fb");
+  const revB = await bookFromFileMap(revBMap, "fb");
+  t("resume key covers same-size motion clean revisions", bookKey(revA) !== bookKey(revB));
+
+  const pickedFiles = window.eval("fileMapFromFiles");
+  const pickedA = await bookFromFileMap(pickedFiles([{ name: "page.png", size: 100, lastModified: 1 }]), "Picked");
+  const pickedB = await bookFromFileMap(pickedFiles([{ name: "page.png", size: 100, lastModified: 2 }]), "Picked");
+  t("resume key covers same-size picked file revisions", bookKey(pickedA) !== bookKey(pickedB));
+
+  /* old unscoped keys stay untouched; automatic adoption could cross-contaminate books */
+  const loadResume = window.eval("loadResume");
+  const legacyKeyOf = window.eval("legacyBookKey");
+  const legacyResumeBook = { resumeId: "legacy-book", title: "Legacy Book", pages: [{ resumeSource: ["pages/page-001.png", 5, 9] }] };
+  const oldResume = JSON.stringify({ mode: "webtoon", page: 3, panel: 2 });
+  localStorage.removeItem(bookKey(legacyResumeBook));
+  localStorage.setItem(legacyKeyOf(legacyResumeBook), oldResume);
+  const ignored = loadResume(legacyResumeBook);
+  t("unscoped legacy resume is not adopted", ignored === null);
+  t("unscoped legacy resume is not deleted", localStorage.getItem(legacyKeyOf(legacyResumeBook)) === oldResume);
+  t("new key stays empty when only legacy record exists", localStorage.getItem(bookKey(legacyResumeBook)) === null);
+  localStorage.removeItem(legacyKeyOf(legacyResumeBook));
 
   /* motion-comic contract: clean panel sources and storyboard text are retained */
   const motion = new Map();
