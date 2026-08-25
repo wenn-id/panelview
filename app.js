@@ -798,6 +798,7 @@ function frameCurrentPanel(animate = true) {
   const total = state.book.pages.length;
   updatePos(`p${state.page + 1} · panel ${state.panel + 1}/${g.rects.length}`);
   setProgress((state.page + state.panel / g.rects.length + 1 / g.rects.length) / total);
+  if (shouldPrefetchNextPanel(state.panel, g.rects.length)) prefetchGuidedNext(state.page);
   persist();
 }
 
@@ -978,6 +979,27 @@ async function preload(i) {
   if (state.book && i < state.book.pages.length) pageURL(i).then((u) => { const im = new Image(); im.src = u; });
 }
 
+/* ----- guided next-page prefetch -----
+   Within the last two panels of a page, warm the next page's object URL,
+   decoded image, and panel cache so crossing the page boundary does not hitch. */
+function shouldPrefetchNextPanel(panel, panelCount) {
+  return panelCount > 0 && panel >= panelCount - 2;
+}
+
+async function prefetchGuidedNext(currentPage) {
+  if (!state.book) return;
+  const next = currentPage + 1;
+  if (next >= state.book.pages.length) return;
+  const url = await pageURL(next);
+  const img = new Image();
+  img.src = url;
+  try { await img.decode(); } catch {}
+  if (state.book && state.page === currentPage && state.panelCache[next]) return;
+  if (!state.panelCache[next]) {
+    await panelsFor(next, img);
+  }
+}
+
 async function setMode(mode) {
   if (!state.book || state.mode === mode) return;
   if (!modeSupported(state.book, mode)) return;
@@ -1085,4 +1107,4 @@ window.addEventListener("resize", () => {
 });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, navigationHint, stageClickIntent, swipeIntent, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, toggleThumbs, renderThumbs, jumpToPage, thumbs, state, setMode, next, prev };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, navigationHint, stageClickIntent, swipeIntent, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, toggleThumbs, renderThumbs, jumpToPage, shouldPrefetchNextPanel, prefetchGuidedNext, thumbs, state, setMode, next, prev };

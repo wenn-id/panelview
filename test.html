@@ -446,6 +446,42 @@
     try { await staleRender; } catch { staleThrew = true; }
     t("stale render continuation bails after close/reopen", !staleThrew && stageEl.childElementCount === domBefore);
 
+    /* guided next-page prefetch: last two panels warm URL, decode, and panel cache */
+    const shouldPrefetchNextPanel = window.eval("shouldPrefetchNextPanel");
+    const prefetchGuidedNext = window.eval("prefetchGuidedNext");
+    t("prefetch threshold excludes early panels", shouldPrefetchNextPanel(1, 4) === false);
+    t("prefetch threshold includes penultimate panel", shouldPrefetchNextPanel(2, 4) === true);
+    t("prefetch threshold includes last panel", shouldPrefetchNextPanel(3, 4) === true);
+    t("prefetch threshold excludes empty panels", shouldPrefetchNextPanel(0, 0) === false);
+    let prefetchGets = 0;
+    const prefetchPage = (panels) => ({
+      get: async () => { prefetchGets++; return new Blob(["page"]); },
+      panels, srcW: 1600, srcH: 2400,
+    });
+    const prefetchBook = { title:"prefetch", comicSol:true, pages:[
+      prefetchPage([{ x:0, y:0, width:800, height:1200 }, { x:800, y:0, width:800, height:1200 }]),
+      prefetchPage([{ x:0, y:0, width:1600, height:2400 }]),
+    ] };
+    resetReaderState(prefetchBook);
+    readerState.page = 0;
+    prefetchGets = 0;
+    await prefetchGuidedNext(0);
+    t("prefetch fetches the next page source", prefetchGets === 1);
+    t("prefetch caches next-page panel rects", Array.isArray(readerState.panelCache[1]) && readerState.panelCache[1].length === 1);
+    prefetchGets = 0;
+    await prefetchGuidedNext(0);
+    t("prefetch reuses cached page URL", prefetchGets === 0);
+    readerState.page = 1;
+    prefetchGets = 0;
+    await prefetchGuidedNext(1);
+    t("prefetch stops at the last page", prefetchGets === 0);
+    closeReader();
+    prefetchGets = 0;
+    await prefetchGuidedNext(0);
+    t("prefetch is inert after close", prefetchGets === 0);
+    readerState.page = 0;
+    readerState.panel = 0;
+
     /* motion render: clean art + overlay text, and no leaked object URLs */
     const renderMotionFn = window.eval("renderMotion");
     const stageEl2 = document.getElementById("stage");
