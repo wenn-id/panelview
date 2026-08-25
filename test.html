@@ -8,7 +8,7 @@
 <div id="reader" hidden><div id="progress"><div id="progress-fill"></div></div>
 <div id="toolbar"><button id="btn-close"></button><div id="book-meta"><span id="book-title"></span><span id="book-subtitle" hidden></span></div>
 <nav id="modes"><button data-mode="page"></button><button data-mode="webtoon"></button><button data-mode="guided"></button></nav>
-<span id="pos"></span><button id="btn-fs"></button></div><div id="stage"></div><div id="hint"></div></div>
+<span id="pos"></span><button id="btn-direction"></button><button id="btn-fs"></button></div><div id="stage"></div><div id="hint"></div></div>
 <script src="app.js"></script>
 <script>
 (async () => {
@@ -295,6 +295,40 @@
   const resumeA = { title: "Same Book", pages: [{ path: "pages/page-001.png", size: 100 }] };
   const resumeB = { title: "Same Book", pages: [{ path: "pages/page-001.png", size: 200 }] };
   t("resume key separates same-title same-count books", bookKey(resumeA) !== bookKey(resumeB));
+
+  /* reading direction: manifest value enters the book contract */
+  const rtlMap = withSchema("1.0");
+  rtlMap.set("project.json", async () => new Blob([JSON.stringify({ project_id:"rtl", settings:{ page_width:1600, page_height:2400, reading_direction:"rtl" } })]));
+  const rtlBook = await bookFromFileMap(rtlMap, "RTL");
+  t("reading_direction rtl is preserved", rtlBook.readingDirection === "rtl");
+  t("missing reading_direction defaults ltr", titledBook.readingDirection === "ltr");
+  const navigationIntent = window.eval("navigationIntent");
+  const navigationHint = window.eval("navigationHint");
+  t("RTL hint points left for forward navigation", navigationHint("rtl", false).startsWith("← / click"));
+  t("LTR hint points right for forward navigation", navigationHint("ltr", true).startsWith("→ / space"));
+  t("RTL ArrowRight means previous", navigationIntent("ArrowRight", "rtl") === "prev");
+  t("RTL ArrowLeft means next", navigationIntent("ArrowLeft", "rtl") === "next");
+  t("RTL PageDown stays forward", navigationIntent("PageDown", "rtl") === "next");
+  t("RTL Space stays forward", navigationIntent(" ", "rtl") === "next");
+  t("RTL left swipe means previous", navigationIntent("swipe-left", "rtl") === "prev");
+  t("RTL right click zone means previous", navigationIntent("click-right", "rtl") === "prev");
+  t("LTR keeps right arrow as next", navigationIntent("ArrowRight", "ltr") === "next");
+  const markSwipeHandled = window.eval("markSwipeHandled");
+  const consumeSwipeClick = window.eval("consumeSwipeClick");
+  const stageClickIntent = window.eval("stageClickIntent");
+  const swipeIntent = window.eval("swipeIntent");
+  const keyboardIntent = window.eval("keyboardIntent");
+  markSwipeHandled(0.8, 100);
+  t("swipe suppresses matching synthetic click", stageClickIntent(0.8, "ltr", 200) === null);
+  markSwipeHandled(0.8, 300);
+  t("post-swipe tap in another zone still navigates", stageClickIntent(0.2, "ltr", 400) === "prev");
+  t("webtoon horizontal swipe is ignored", swipeIntent("webtoon", -100, "ltr") === null);
+  t("page horizontal swipe navigates", swipeIntent("page", -100, "ltr") === "next");
+  t("interactive controls are excluded from global shortcuts", keyboardIntent({ key:" ", target:document.querySelector("#btn-direction") }, "ltr") === null);
+  t("page controls remain keyboard routable", keyboardIntent({ key:"PageDown", target:document.body }, "rtl") === "next");
+  const cssText = await (await fetch("style.css")).text();
+  t("mobile toolbar can wrap", /@media\s*\(max-width:\s*560px\)[\s\S]*#toolbar[^}]*flex-wrap:\s*wrap/.test(cssText));
+  t("mobile toolbar controls have explicit order", /@media[\s\S]*#toolbar > #btn-direction[^}]*order:\s*\d+/.test(cssText) && !/@media[\s\S]*#book-meta\s*\{[^}]*order/.test(cssText.replace(/#toolbar > #book-meta/g, "")));
 
   /* motion revisions: same page image and storyboard, different clean art */
   const cleanVariant = (sizes) => {

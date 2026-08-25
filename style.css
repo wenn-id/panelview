@@ -128,6 +128,16 @@ a:hover { text-decoration: underline; }
 #modes { margin-left: auto; display: flex; gap: 4px; }
 #pos { color: var(--dim); font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+@media (max-width: 560px) {
+  #toolbar { gap: 4px; padding: 6px 8px; flex-wrap: wrap; }
+  #toolbar > #btn-close { order: 0; }
+  #toolbar > #book-meta { order: 1; flex: 1 1 calc(100% - 56px); min-width: 0; }
+  #toolbar > #modes { order: 2; margin-left: 0; flex: 1 1 auto; min-width: 0; }
+  #toolbar > #pos { order: 3; flex: 0 0 auto; }
+  #toolbar > #btn-direction { order: 4; flex: 0 0 auto; }
+  #toolbar > #btn-fs { order: 5; flex: 0 0 auto; }
+}
+
 #schema-warning {
   flex: none;
   padding: 8px 16px;
