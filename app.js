@@ -323,6 +323,7 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
   }
   const s = project.settings || {};
   const pw = s.page_width || 1600, ph = s.page_height || 2400;
+  const readingDirection = s.reading_direction === "rtl" ? "rtl" : "ltr";
   const pagePaths = [...fileMap.keys()].filter((p) => p.startsWith(root + "pages/") && IMG_RE.test(p)).sort(naturalCompare);
   if (!pagePaths.length) throw new Error("no pages/ images");
 
@@ -391,6 +392,7 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
     resumeId: project.title || project.project_id || fallbackTitle,
     comicSol: true,
     motionComic,
+    readingDirection,
     pages,
     ...(logline ? { subtitle: logline } : {}),
     ...(schemaNote ? { schemaNote } : {}),
@@ -476,6 +478,7 @@ const stage = $("#stage");
 const state = {
   book: null,
   mode: "page",
+  readingDirection: "ltr",
   page: 0,
   panel: 0,
   urls: [],       /* object URL or in-flight promise per page */
@@ -555,6 +558,8 @@ async function openBook(book) {
   /* resume */
   const saved = loadResume(book);
   state.mode = saved?.mode || (book.comicSol ? "guided" : "page");
+  state.readingDirection = saved?.direction || book.readingDirection || "ltr";
+  updateDirectionButton();
   if (!modeSupported(book, state.mode)) state.mode = "guided";
   const motionButton = document.querySelector('#modes button[data-mode="motion"]');
   if (motionButton) motionButton.hidden = !modeSupported(book, "motion");
@@ -579,7 +584,7 @@ function closeBook() {
 function persist() {
   if (!state.book) return;
   try {
-    localStorage.setItem(bookKey(state.book), JSON.stringify({ mode: state.mode, page: state.page, panel: state.panel }));
+    localStorage.setItem(bookKey(state.book), JSON.stringify({ mode: state.mode, page: state.page, panel: state.panel, direction: state.readingDirection }));
   } catch {}
 }
 
@@ -780,6 +785,34 @@ function frameMotionPanel(animate = true) {
 
 const fitMotionCanvas = (animate) => frameMotionPanel(animate);
 
+/* Physical input → logical traversal. Keep next()/prev() direction-neutral so
+   panel order and page order remain manifest-defined. */
+function navigationIntent(input, direction = "ltr") {
+  const rtl = direction === "rtl";
+  if (input === "ArrowRight" || input === "PageDown" || input === " ") return rtl ? "prev" : "next";
+  if (input === "ArrowLeft" || input === "PageUp") return rtl ? "next" : "prev";
+  if (input === "swipe-left") return rtl ? "prev" : "next";
+  if (input === "swipe-right") return rtl ? "next" : "prev";
+  if (input === "click-left") return rtl ? "next" : "prev";
+  if (input === "click-right") return rtl ? "prev" : "next";
+  return input;
+}
+
+function updateDirectionButton() {
+  const button = $("#btn-direction");
+  if (!button) return;
+  button.textContent = state.readingDirection === "rtl" ? "RTL" : "LTR";
+  button.title = `Reading direction: ${state.readingDirection.toUpperCase()} (click to toggle)`;
+  button.setAttribute("aria-label", button.title);
+}
+
+function toggleDirection() {
+  if (!state.book) return;
+  state.readingDirection = state.readingDirection === "rtl" ? "ltr" : "rtl";
+  updateDirectionButton();
+  persist();
+}
+
 /* ---------------- navigation ---------------- */
 
 async function next() {
@@ -883,18 +916,22 @@ $("#btn-fs").addEventListener("click", () => {
   else $("#reader").requestFullscreen?.();
 });
 document.querySelectorAll("#modes button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+$("#btn-direction")?.addEventListener("click", toggleDirection);
 
 stage.addEventListener("click", (e) => {
   if (state.mode === "webtoon") return;
   const x = e.clientX / window.innerWidth;
-  x < 0.3 ? prev() : next();
+  const intent = navigationIntent(x < 0.3 ? "click-left" : "click-right", state.readingDirection);
+  intent === "prev" ? prev() : next();
 });
 
 document.addEventListener("keydown", (e) => {
   if (!state.book) return;
   switch (e.key) {
-    case "ArrowRight": case " ": case "PageDown": e.preventDefault(); next(); break;
-    case "ArrowLeft": case "PageUp": e.preventDefault(); prev(); break;
+    case "ArrowRight": case " ": case "PageDown":
+      e.preventDefault(); navigationIntent(e.key, state.readingDirection) === "prev" ? prev() : next(); break;
+    case "ArrowLeft": case "PageUp":
+      e.preventDefault(); navigationIntent(e.key, state.readingDirection) === "prev" ? prev() : next(); break;
     case "1": setMode("page"); break;
     case "2": setMode("webtoon"); break;
     case "3": setMode("guided"); break;
@@ -911,7 +948,10 @@ stage.addEventListener("touchend", (e) => {
   if (touchX == null) return;
   const dx = e.changedTouches[0].clientX - touchX;
   const dy = e.changedTouches[0].clientY - touchY;
-  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) dx < 0 ? next() : prev();
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    const swipe = dx < 0 ? "swipe-left" : "swipe-right";
+    navigationIntent(swipe, state.readingDirection) === "prev" ? prev() : next();
+  }
   touchX = null;
 }, { passive: true });
 
@@ -921,4 +961,4 @@ window.addEventListener("resize", () => {
 });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, state, setMode, next, prev };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, toggleDirection, state, setMode, next, prev };

@@ -296,6 +296,19 @@
   const resumeB = { title: "Same Book", pages: [{ path: "pages/page-001.png", size: 200 }] };
   t("resume key separates same-title same-count books", bookKey(resumeA) !== bookKey(resumeB));
 
+  /* reading direction: manifest value enters the book contract */
+  const rtlMap = withSchema("1.0");
+  rtlMap.set("project.json", async () => new Blob([JSON.stringify({ project_id:"rtl", settings:{ page_width:1600, page_height:2400, reading_direction:"rtl" } })]));
+  const rtlBook = await bookFromFileMap(rtlMap, "RTL");
+  t("reading_direction rtl is preserved", rtlBook.readingDirection === "rtl");
+  t("missing reading_direction defaults ltr", titledBook.readingDirection === "ltr");
+  const navigationIntent = window.eval("navigationIntent");
+  t("RTL ArrowRight means previous", navigationIntent("ArrowRight", "rtl") === "prev");
+  t("RTL ArrowLeft means next", navigationIntent("ArrowLeft", "rtl") === "next");
+  t("RTL left swipe means previous", navigationIntent("swipe-left", "rtl") === "prev");
+  t("RTL right click zone means previous", navigationIntent("click-right", "rtl") === "prev");
+  t("LTR keeps right arrow as next", navigationIntent("ArrowRight", "ltr") === "next");
+
   /* motion revisions: same page image and storyboard, different clean art */
   const cleanVariant = (sizes) => {
     const m = new Map();
