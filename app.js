@@ -806,12 +806,15 @@ function navigationIntent(input, direction = "ltr") {
 }
 
 /* A qualifying swipe must not also be handled as the browser's synthetic click. */
+let swipeHandledZone = null;
 let swipeHandledAt = 0;
-function markSwipeHandled(now = Date.now()) {
+function markSwipeHandled(zone, now = Date.now()) {
+  swipeHandledZone = typeof zone === "number" ? (zone < 0.3 ? "click-left" : "click-right") : zone;
   swipeHandledAt = now;
 }
-function consumeSwipeClick(now = Date.now()) {
-  if (swipeHandledAt && now - swipeHandledAt < 700) {
+function consumeSwipeClick(zone, now = Date.now()) {
+  if (swipeHandledZone === zone && swipeHandledAt && now - swipeHandledAt < 700) {
+    swipeHandledZone = null;
     swipeHandledAt = 0;
     return true;
   }
@@ -824,8 +827,15 @@ function isInteractiveTarget(node) {
 }
 
 function stageClickIntent(x, direction = "ltr", now = Date.now()) {
-  if (consumeSwipeClick(now)) return null;
-  return navigationIntent(x < 0.3 ? "click-left" : "click-right", direction);
+  const zone = x < 0.3 ? "click-left" : "click-right";
+  if (consumeSwipeClick(zone, now)) return null;
+  return navigationIntent(zone, direction);
+}
+
+/* Horizontal swipes follow the same mode rules as click navigation. */
+function swipeIntent(mode, dx, direction = "ltr") {
+  if (mode === "webtoon") return null;
+  return navigationIntent(dx < 0 ? "swipe-left" : "swipe-right", direction);
 }
 
 function keyboardIntent(event, direction = "ltr") {
@@ -985,9 +995,11 @@ stage.addEventListener("touchend", (e) => {
   const dx = e.changedTouches[0].clientX - touchX;
   const dy = e.changedTouches[0].clientY - touchY;
   if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-    markSwipeHandled();
-    const swipe = dx < 0 ? "swipe-left" : "swipe-right";
-    navigationIntent(swipe, state.readingDirection) === "prev" ? prev() : next();
+    const zone = dx < 0 ? "click-left" : "click-right";
+    markSwipeHandled(zone);
+    const intent = swipeIntent(state.mode, dx, state.readingDirection);
+    if (intent === "prev") prev();
+    else if (intent === "next") next();
   }
   touchX = null;
 }, { passive: true });
@@ -998,4 +1010,4 @@ window.addEventListener("resize", () => {
 });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, navigationHint, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, state, setMode, next, prev };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, navigationHint, stageClickIntent, swipeIntent, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, state, setMode, next, prev };

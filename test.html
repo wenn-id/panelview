@@ -316,9 +316,14 @@
   const markSwipeHandled = window.eval("markSwipeHandled");
   const consumeSwipeClick = window.eval("consumeSwipeClick");
   const stageClickIntent = window.eval("stageClickIntent");
+  const swipeIntent = window.eval("swipeIntent");
   const keyboardIntent = window.eval("keyboardIntent");
-  markSwipeHandled(100);
-  t("swipe suppresses one synthetic click", stageClickIntent(0.8, "ltr", 200) === null && stageClickIntent(0.8, "ltr", 200) === "next");
+  markSwipeHandled(0.8, 100);
+  t("swipe suppresses matching synthetic click", stageClickIntent(0.8, "ltr", 200) === null);
+  markSwipeHandled(0.8, 300);
+  t("post-swipe tap in another zone still navigates", stageClickIntent(0.2, "ltr", 400) === "prev");
+  t("webtoon horizontal swipe is ignored", swipeIntent("webtoon", -100, "ltr") === null);
+  t("page horizontal swipe navigates", swipeIntent("page", -100, "ltr") === "next");
   t("interactive controls are excluded from global shortcuts", keyboardIntent({ key:" ", target:document.querySelector("#btn-direction") }, "ltr") === null);
   t("page controls remain keyboard routable", keyboardIntent({ key:"PageDown", target:document.body }, "rtl") === "next");
   const cssText = await (await fetch("style.css")).text();
