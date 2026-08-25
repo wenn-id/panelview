@@ -135,7 +135,8 @@ a:hover { text-decoration: underline; }
   #toolbar > #modes { order: 2; margin-left: 0; flex: 1 1 auto; min-width: 0; }
   #toolbar > #pos { order: 3; flex: 0 0 auto; }
   #toolbar > #btn-direction { order: 4; flex: 0 0 auto; }
-  #toolbar > #btn-fs { order: 5; flex: 0 0 auto; }
+  #toolbar > #btn-thumbs { order: 5; flex: 0 0 auto; }
+  #toolbar > #btn-fs { order: 6; flex: 0 0 auto; }
 }
 
 #schema-warning {
@@ -149,6 +150,26 @@ a:hover { text-decoration: underline; }
 }
 
 #stage { flex: 1; position: relative; overflow: hidden; }
+
+/* thumbnail strip */
+#thumbs {
+  flex: none; display: flex; gap: 8px;
+  overflow-x: auto; overflow-y: hidden;
+  padding: 8px 12px;
+  background: #0b0d14e6; backdrop-filter: blur(8px);
+  border-top: 1px solid #ffffff0f;
+  scroll-behavior: smooth;
+}
+#thumbs[hidden] { display: none; }
+#thumbs button {
+  flex: 0 0 auto; position: relative;
+  background: none; border: 2px solid transparent;
+  border-radius: 6px; padding: 0;
+  cursor: pointer; overflow: hidden;
+  line-height: 0;
+}
+#thumbs button.active { border-color: var(--accent); }
+#thumbs button canvas { display: block; background: #111420; }
 
 /* page mode */
 #stage.mode-page { display: flex; align-items: center; justify-content: center; }

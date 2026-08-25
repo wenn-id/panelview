@@ -487,6 +487,8 @@ const state = {
   motion: null,
   motionUrls: [],
 };
+const thumbs = { open: false, rendered: false };
+const thumbsEl = $("#thumbs");
 
 /* bumped by every render()/close so stale async continuations can bail out */
 let renderGen = 0;
@@ -536,6 +538,71 @@ async function pageURL(i) {
   return state.urls[i];
 }
 
+function updateThumbActive() {
+  if (!thumbsEl) return;
+  thumbsEl.querySelectorAll("button[data-page]").forEach((button) => {
+    button.classList.toggle("active", +button.dataset.page === state.page);
+  });
+}
+
+async function jumpToPage(index) {
+  if (!state.book) return;
+  state.page = Math.max(0, Math.min(index, state.book.pages.length - 1));
+  state.panel = 0;
+  updateThumbActive();
+  if (state.mode === "webtoon") {
+    const target = stage.querySelector(`img[data-index="${state.page}"]`);
+    if (target) stage.scrollTop = target.offsetTop;
+    persist();
+  } else {
+    await render();
+    if (thumbs.open) renderThumbs();
+  }
+}
+
+async function renderThumbs() {
+  if (!thumbsEl || !thumbs.open || !state.book) return;
+  thumbsEl.innerHTML = "";
+  updateThumbActive();
+  state.book.pages.forEach((_, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.page = String(index);
+    button.setAttribute("aria-label", `Jump to page ${index + 1}`);
+    const canvas = document.createElement("canvas");
+    canvas.width = 120; canvas.height = 160;
+    canvas.setAttribute("aria-hidden", "true");
+    button.appendChild(canvas);
+    button.addEventListener("click", () => { jumpToPage(index); });
+    thumbsEl.appendChild(button);
+    pageURL(index).then((url) => {
+      const image = new Image();
+      image.onload = () => {
+        const scale = Math.min(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+        const width = Math.max(1, Math.round(image.naturalWidth * scale));
+        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        canvas.getContext("2d").drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+      };
+      image.src = url;
+    }).catch(() => {});
+  });
+  updateThumbActive();
+}
+
+function toggleThumbs() {
+  if (!thumbsEl) return;
+  thumbs.open = !thumbs.open;
+  thumbsEl.hidden = !thumbs.open;
+  thumbs.rendered = thumbs.open;
+  const button = $("#btn-thumbs");
+  if (button) {
+    button.setAttribute("aria-expanded", String(thumbs.open));
+    button.title = thumbs.open ? "Hide thumbnails (t)" : "Show thumbnails (t)";
+  }
+  if (thumbs.open) renderThumbs();
+}
+
+
 async function openBook(book) {
   closeBook();
   state.book = book;
@@ -582,6 +649,11 @@ function closeBook() {
   }
   for (const u of state.motionUrls || []) URL.revokeObjectURL(u);
   state.book = null; state.urls = []; state.motionUrls = []; state.guided = null; state.motion = null;
+  thumbs.open = false;
+  thumbs.rendered = false;
+  if (thumbsEl) { thumbsEl.hidden = true; thumbsEl.replaceChildren(); }
+  const thumbsButton = $("#btn-thumbs");
+  if (thumbsButton) thumbsButton.setAttribute("aria-expanded", "false");
   $("#reader").hidden = true;
   $("#landing").hidden = false;
 }
@@ -620,6 +692,7 @@ async function render() {
   else if (state.mode === "webtoon") await renderWebtoon();
   else if (state.mode === "motion") await renderMotion();
   else await renderGuided();
+  if (thumbs.open) updateThumbActive();
   persist();
 }
 
@@ -962,6 +1035,7 @@ $("#btn-fs").addEventListener("click", () => {
 });
 document.querySelectorAll("#modes button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 $("#btn-direction")?.addEventListener("click", toggleDirection);
+$("#btn-thumbs")?.addEventListener("click", toggleThumbs);
 
 stage.addEventListener("click", (e) => {
   if (state.mode === "webtoon") return;
@@ -982,6 +1056,7 @@ document.addEventListener("keydown", (e) => {
     case "2": setMode("webtoon"); break;
     case "3": setMode("guided"); break;
     case "4": setMode("motion"); break;
+    case "t": toggleThumbs(); break;
     case "f": $("#btn-fs").click(); break;
     case "Escape": if (!document.fullscreenElement) closeBook(); break;
   }
@@ -1010,4 +1085,4 @@ window.addEventListener("resize", () => {
 });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, navigationHint, stageClickIntent, swipeIntent, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, state, setMode, next, prev };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, navigationHint, stageClickIntent, swipeIntent, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, toggleThumbs, renderThumbs, jumpToPage, thumbs, state, setMode, next, prev };
