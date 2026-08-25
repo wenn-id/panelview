@@ -24,6 +24,9 @@ jobs:
       # zero-build repo: CI runs the static files, it never builds them
       - name: Browser suite + Comic Sol parity
         run: node tools/run-tests.mjs test.html tools/parity.html
+      # the runner is CI infrastructure, so its own failure mode is gated too
+      - name: Runner crash regression
+        run: node tools/crash-check.mjs
       - name: Upload failure screenshots
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
