@@ -286,12 +286,15 @@
   titled.set("pages/page-001.png", async () => new Blob(["fake"]));
   const titledBook = await bookFromFileMap(titled, "Fallback");
   t("project_id slug becomes title", titledBook.title === "Sunlight Courier");
-  t("prettified title preserves raw project_id resume key", bookKey(titledBook) === "panelview:sunlight-courier:1");
+  t("prettified title preserves raw project_id resume key", bookKey(titledBook).startsWith("panelview:sunlight-courier:1:") && /[0-9a-f]{16}$/.test(bookKey(titledBook)));
   t("story-plan logline becomes subtitle", titledBook.subtitle === "A courier delivers sunlight to an underground city.");
   titled.set("project.json", async () => new Blob([JSON.stringify({title:"Sunlight Run",project_id:"sunlight-courier",settings:{page_width:1600,page_height:2400}})]));
   const explicitTitleBook = await bookFromFileMap(titled, "Fallback");
   t("explicit project title wins", explicitTitleBook.title === "Sunlight Run");
-  t("explicit title preserves existing resume key", bookKey(explicitTitleBook) === "panelview:Sunlight Run:1");
+  t("explicit title preserves existing resume key", bookKey(explicitTitleBook).startsWith("panelview:Sunlight Run:1:"));
+  const resumeA = { title: "Same Book", pages: [{ path: "pages/page-001.png", size: 100 }] };
+  const resumeB = { title: "Same Book", pages: [{ path: "pages/page-001.png", size: 200 }] };
+  t("resume key separates same-title same-count books", bookKey(resumeA) !== bookKey(resumeB));
 
   /* motion-comic contract: clean panel sources and storyboard text are retained */
   const motion = new Map();
