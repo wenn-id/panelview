@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>parity</title>
+</head>
+<body>
+<pre id="out">running…</pre>
+<!-- app.js wires itself to the real reader DOM on load; same minimal stub as test.html -->
+<div id="landing" hidden><div id="dropzone"></div><button id="btn-demo"></button>
+<input type="file" id="file-input" hidden><input type="file" id="dir-input" hidden></div>
+<div id="reader" hidden><div id="progress"><div id="progress-fill"></div></div>
+<div id="toolbar"><button id="btn-close"></button><div id="book-meta"><span id="book-title"></span><span id="book-subtitle" hidden></span></div>
+<nav id="modes"><button data-mode="page"></button><button data-mode="webtoon"></button><button data-mode="guided"></button><button data-mode="motion" hidden></button></nav>
+<span id="pos"></span><button id="btn-fs"></button></div><div id="schema-warning" hidden></div><div id="stage"></div><div id="hint"></div></div>
+<script src="../app.js"></script>
+<script type="module">
+/* Comic Sol parity harness: drives the real reader pipeline
+   (bookFromFileMap → comicSolBook) against the committed fixture captured
+   from wenn-id/comicsol@<ref>. Binary assets don't exist in the fixture;
+   the harness substitutes placeholder blobs because geometry/title/text
+   parsing only depends on manifest bytes and the presence of asset paths. */
+
+const results = [];
+const t = (name, ok, extra) => results.push((ok ? "PASS" : "FAIL") + ": " + name + (ok || extra == null ? "" : " — " + extra));
+
+const pv = window.__panelview;
+
+const fixture = await (await fetch("../tests/fixtures/sunlight-courier/files.json")).json();
+const manifestText = {};
+for (const p of ["project.json", "plan/storyboard.json", "plan/story-plan.json"]) {
+  manifestText[p] = await (await fetch(`../tests/fixtures/sunlight-courier/${p}`)).text();
+}
+const project = JSON.parse(manifestText["project.json"]);
+const storyboard = JSON.parse(manifestText["plan/storyboard.json"]);
+const storyPlan = JSON.parse(manifestText["plan/story-plan.json"]);
+
+/* --- fixture self-contract ------------------------------------------- */
+t("fixture is pinned to comicsol", fixture.repo === "wenn-id/comicsol" && typeof fixture.ref === "string" && fixture.ref.length === 40);
+t("fixture lists page images", fixture.files.some((f) => /^pages\/page-\d+\.(png|jpe?g|webp)$/.test(f)));
+const panelIds = storyboard.pages.flatMap((pg) => (pg.panels || []).map((pn) => pn.id)).filter(Boolean);
+t("every storyboard panel has upstream clean art", panelIds.every((id) => fixture.files.includes(`panels/${id}/clean.png`)));
+
+/* --- drive the real pipeline ----------------------------------------- */
+const fileMap = new Map();
+for (const p of Object.keys(manifestText)) {
+  const text = manifestText[p];
+  fileMap.set(p, async () => new Blob([text], { type: "application/json" }));
+}
+for (const p of fixture.files) {
+  if (!fileMap.has(p)) fileMap.set(p, async () => new Blob(["placeholder"], { type: "application/octet-stream" }));
+}
+
+let book = null, bookErr = null;
+try { book = await pv.bookFromFileMap(fileMap, "sunlight-courier"); }
+catch (e) { bookErr = e; }
+t("book builds from fixture manifests", !!book, String(bookErr));
+
+if (book) {
+  t("detected as Comic Sol project", book.comicSol === true);
+  t("motion-comic eligible", book.motionComic === true);
+  const wantTitle = project.title || project.project_id.replace(/[-_]+/g, " ").replace(/\S+/g, (w) => w[0].toUpperCase() + w.slice(1));
+  t("title matches manifest", book.title === wantTitle, `${book.title} != ${wantTitle}`);
+  t("subtitle carries story-plan logline", book.subtitle === storyPlan.logline.trim(), String(book.subtitle));
+  t("page count matches manifest", book.pages.length === fixture.files.filter((f) => /^pages\//.test(f)).length,
+    `${book.pages.length}`);
+
+  const pw = project.settings.page_width, ph = project.settings.page_height;
+  const norm = (r) => ({ x: r.x, y: r.y, width: r.width, height: r.height });
+  let rectMismatches = [], textMismatches = [], idMismatches = [];
+  book.pages.forEach((page, i) => {
+    const sb = storyboard.pages.find((pg) => pg.number === i + 1) || storyboard.pages[i];
+    if (!sb) return;
+    if (JSON.stringify(page.panels?.map(norm)) !== JSON.stringify(sb.panels.map((p) => norm(p.rect)))) {
+      rectMismatches.push(i + 1);
+    }
+    const gotIds = (page.motionPanels || []).map((m) => m.id);
+    if (JSON.stringify(gotIds) !== JSON.stringify(sb.panels.map((p) => p.id))) idMismatches.push(i + 1);
+    const gotTexts = (page.motionPanels || []).map((m) => m.text);
+    if (JSON.stringify(gotTexts) !== JSON.stringify(sb.panels.map((p) => p.text || []))) textMismatches.push(i + 1);
+  });
+  t("guided rects equal storyboard rects", !rectMismatches.length, "pages " + rectMismatches.join(","));
+  t("motion panel ids match storyboard", !idMismatches.length, "pages " + idMismatches.join(","));
+  t("motion caption text matches storyboard", !textMismatches.length, "pages " + textMismatches.join(","));
+  t("source dimensions come from settings", book.pages.every((p) => p.srcW === pw && p.srcH === ph));
+}
+
+const failed = results.filter((r) => r.startsWith("FAIL")).length;
+document.getElementById("out").textContent =
+  results.join("\n") + `\n\n${results.length - failed}/${results.length} passed`;
+document.title = failed ? "FAIL" : "PASS";
+</script>
+</body>
+</html>
