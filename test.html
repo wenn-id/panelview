@@ -8,7 +8,7 @@
 <div id="reader" hidden><div id="progress"><div id="progress-fill"></div></div>
 <div id="toolbar"><button id="btn-close"></button><div id="book-meta"><span id="book-title"></span><span id="book-subtitle" hidden></span></div>
 <nav id="modes"><button data-mode="page"></button><button data-mode="webtoon"></button><button data-mode="guided"></button></nav>
-<span id="pos"></span><button id="btn-fs"></button></div><div id="stage"></div><div id="hint"></div></div>
+<span id="pos"></span><button id="btn-direction"></button><button id="btn-fs"></button></div><div id="stage"></div><div id="hint"></div></div>
 <script src="app.js"></script>
 <script>
 (async () => {
@@ -305,9 +305,21 @@
   const navigationIntent = window.eval("navigationIntent");
   t("RTL ArrowRight means previous", navigationIntent("ArrowRight", "rtl") === "prev");
   t("RTL ArrowLeft means next", navigationIntent("ArrowLeft", "rtl") === "next");
+  t("RTL PageDown stays forward", navigationIntent("PageDown", "rtl") === "next");
+  t("RTL Space stays forward", navigationIntent(" ", "rtl") === "next");
   t("RTL left swipe means previous", navigationIntent("swipe-left", "rtl") === "prev");
   t("RTL right click zone means previous", navigationIntent("click-right", "rtl") === "prev");
   t("LTR keeps right arrow as next", navigationIntent("ArrowRight", "ltr") === "next");
+  const markSwipeHandled = window.eval("markSwipeHandled");
+  const consumeSwipeClick = window.eval("consumeSwipeClick");
+  const stageClickIntent = window.eval("stageClickIntent");
+  const keyboardIntent = window.eval("keyboardIntent");
+  markSwipeHandled(100);
+  t("swipe suppresses one synthetic click", stageClickIntent(0.8, "ltr", 200) === null && stageClickIntent(0.8, "ltr", 200) === "next");
+  t("interactive controls are excluded from global shortcuts", keyboardIntent({ key:" ", target:document.querySelector("#btn-direction") }, "ltr") === null);
+  t("page controls remain keyboard routable", keyboardIntent({ key:"PageDown", target:document.body }, "rtl") === "next");
+  const cssText = await (await fetch("style.css")).text();
+  t("mobile toolbar can wrap", /@media\s*\(max-width:\s*560px\)[\s\S]*#toolbar[^}]*flex-wrap:\s*wrap/.test(cssText));
 
   /* motion revisions: same page image and storyboard, different clean art */
   const cleanVariant = (sizes) => {

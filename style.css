@@ -128,6 +128,13 @@ a:hover { text-decoration: underline; }
 #modes { margin-left: auto; display: flex; gap: 4px; }
 #pos { color: var(--dim); font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+@media (max-width: 560px) {
+  #toolbar { gap: 4px; padding: 6px 8px; flex-wrap: wrap; }
+  #book-meta { order: 1; flex: 1 1 calc(100% - 56px); min-width: 0; }
+  #modes { order: 2; margin-left: 0; flex: 1 1 auto; min-width: 0; }
+  #pos, #btn-direction, #btn-fs { flex: 0 0 auto; }
+}
+
 #schema-warning {
   flex: none;
   padding: 8px 16px;

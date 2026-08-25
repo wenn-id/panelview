@@ -789,13 +789,43 @@ const fitMotionCanvas = (animate) => frameMotionPanel(animate);
    panel order and page order remain manifest-defined. */
 function navigationIntent(input, direction = "ltr") {
   const rtl = direction === "rtl";
-  if (input === "ArrowRight" || input === "PageDown" || input === " ") return rtl ? "prev" : "next";
-  if (input === "ArrowLeft" || input === "PageUp") return rtl ? "next" : "prev";
+  if (input === "PageDown" || input === " ") return "next";
+  if (input === "PageUp") return "prev";
+  if (input === "ArrowRight") return rtl ? "prev" : "next";
+  if (input === "ArrowLeft") return rtl ? "next" : "prev";
   if (input === "swipe-left") return rtl ? "prev" : "next";
   if (input === "swipe-right") return rtl ? "next" : "prev";
   if (input === "click-left") return rtl ? "next" : "prev";
   if (input === "click-right") return rtl ? "prev" : "next";
   return input;
+}
+
+/* A qualifying swipe must not also be handled as the browser's synthetic click. */
+let swipeHandledAt = 0;
+function markSwipeHandled(now = Date.now()) {
+  swipeHandledAt = now;
+}
+function consumeSwipeClick(now = Date.now()) {
+  if (swipeHandledAt && now - swipeHandledAt < 700) {
+    swipeHandledAt = 0;
+    return true;
+  }
+  return false;
+}
+
+/* Toolbar controls keep their native keyboard activation. */
+function isInteractiveTarget(node) {
+  return !!(node && node.closest && node.closest("button, a, input, select, textarea, [contenteditable='true']"));
+}
+
+function stageClickIntent(x, direction = "ltr", now = Date.now()) {
+  if (consumeSwipeClick(now)) return null;
+  return navigationIntent(x < 0.3 ? "click-left" : "click-right", direction);
+}
+
+function keyboardIntent(event, direction = "ltr") {
+  if (isInteractiveTarget(event.target)) return null;
+  return navigationIntent(event.key, direction);
 }
 
 function updateDirectionButton() {
@@ -920,13 +950,14 @@ $("#btn-direction")?.addEventListener("click", toggleDirection);
 
 stage.addEventListener("click", (e) => {
   if (state.mode === "webtoon") return;
-  const x = e.clientX / window.innerWidth;
-  const intent = navigationIntent(x < 0.3 ? "click-left" : "click-right", state.readingDirection);
-  intent === "prev" ? prev() : next();
+  const intent = stageClickIntent(e.clientX / window.innerWidth, state.readingDirection);
+  if (intent === "prev") prev(); else if (intent === "next") next();
 });
 
 document.addEventListener("keydown", (e) => {
   if (!state.book) return;
+  const intent = keyboardIntent(e, state.readingDirection);
+  if (!intent) return;
   switch (e.key) {
     case "ArrowRight": case " ": case "PageDown":
       e.preventDefault(); navigationIntent(e.key, state.readingDirection) === "prev" ? prev() : next(); break;
@@ -949,6 +980,7 @@ stage.addEventListener("touchend", (e) => {
   const dx = e.changedTouches[0].clientX - touchX;
   const dy = e.changedTouches[0].clientY - touchY;
   if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    markSwipeHandled();
     const swipe = dx < 0 ? "swipe-left" : "swipe-right";
     navigationIntent(swipe, state.readingDirection) === "prev" ? prev() : next();
   }
@@ -961,4 +993,4 @@ window.addEventListener("resize", () => {
 });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, toggleDirection, state, setMode, next, prev };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, state, setMode, next, prev };
