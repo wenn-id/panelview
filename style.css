@@ -247,6 +247,19 @@ a:hover { text-decoration: underline; }
 }
 #hint.show { opacity: 1; }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+  .guided-canvas, .guided-dim, .motion-canvas, .motion-panel, #hint, #progress-fill {
+    transition: none !important;
+    will-change: auto;
+  }
+}
+
 @media (max-width: 600px) {
   #book-meta { max-width: 42vw; }
   #book-subtitle { display: none; }
