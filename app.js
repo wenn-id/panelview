@@ -370,8 +370,14 @@ async function comicSolBook(fileMap, root, fallbackTitle) {
       };
     }) : [];
     const source = fileMap.get(p)?.resumeSource || [p];
+    const cleanSources = Array.isArray(sb?.panels) ? sb.panels.flatMap((panel) => {
+      const id = typeof panel?.id === "string" ? panel.id : "";
+      if (!id) return [];
+      const cleanPath = `${root}panels/${id}/clean.png`;
+      return fileMap.get(cleanPath)?.resumeSource || [cleanPath];
+    }) : [];
     return { get: fileMap.get(p), panels, motionPanels, srcW: pw, srcH: ph,
-      resumeSource: [...source, ...sbSignature(sb)] };
+      resumeSource: [...source, ...sbSignature(sb), ...cleanSources] };
   });
   /* motion-comic mode needs every panel: clean art + a rect to place it in */
   const motionComic = pages.every((page) => page.motionPanels.length > 0
@@ -487,6 +493,26 @@ function bookKey(book) {
   const prefix = "panelview:" + (book.resumeId || book.title) + ":" + book.pages.length;
   return prefix + ":" + resumeFingerprint(sources);
 }
+
+function legacyBookKey(book) {
+  return "panelview:" + (book.resumeId || book.title) + ":" + book.pages.length;
+}
+
+function loadResume(book) {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(bookKey(book)) || "null");
+    if (!saved) {
+      const legacyKey = legacyBookKey(book);
+      saved = JSON.parse(localStorage.getItem(legacyKey) || "null");
+      if (saved) {
+        localStorage.setItem(bookKey(book), JSON.stringify(saved));
+        localStorage.removeItem(legacyKey);
+      }
+    }
+  } catch {}
+  return saved;
+}
 /* motion-comic mode exists only when every panel ships unlettered clean art */
 function modeSupported(book, mode) {
   if (!book || !Array.isArray(book.pages) || !book.pages.length) return false;
@@ -531,8 +557,7 @@ async function openBook(book) {
   $("#landing").hidden = true;
   $("#reader").hidden = false;
   /* resume */
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(bookKey(book)) || "null"); } catch {}
+  const saved = loadResume(book);
   state.mode = saved?.mode || (book.comicSol ? "guided" : "page");
   if (!modeSupported(book, state.mode)) state.mode = "guided";
   const motionButton = document.querySelector('#modes button[data-mode="motion"]');
@@ -900,4 +925,4 @@ window.addEventListener("resize", () => {
 });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, state, setMode, next, prev };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, state, setMode, next, prev };

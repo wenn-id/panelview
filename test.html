@@ -296,6 +296,35 @@
   const resumeB = { title: "Same Book", pages: [{ path: "pages/page-001.png", size: 200 }] };
   t("resume key separates same-title same-count books", bookKey(resumeA) !== bookKey(resumeB));
 
+  /* motion revisions: same page image and storyboard, different clean art */
+  const cleanVariant = (sizes) => {
+    const m = new Map();
+    m.set("project.json", async () => new Blob([JSON.stringify({project_id:"rev",settings:{page_width:1600,page_height:2400}})]));
+    m.set("plan/storyboard.json", async () => new Blob([JSON.stringify({pages:[{number:1,layout:"full-page",panels:[{id:"p01-01",rect:{x:0,y:0,width:1600,height:2400}}]}]})]));
+    const page = async () => new Blob(["lettered"]);
+    page.resumeSource = ["pages/page-001.png", 10, 20];
+    m.set("pages/page-001.png", page);
+    const clean = async () => new Blob(["clean"]);
+    clean.resumeSource = ["panels/p01-01/clean.png", ...sizes];
+    m.set("panels/p01-01/clean.png", clean);
+    return m;
+  };
+  const revA = await bookFromFileMap(cleanVariant([31, 64]), "fb");
+  const revB = await bookFromFileMap(cleanVariant([77, 512]), "fb");
+  t("resume key covers motion clean art revisions", bookKey(revA) !== bookKey(revB));
+
+  /* upgrade path: progress stored under the pre-fingerprint key is adopted once */
+  const loadResume = window.eval("loadResume");
+  const legacyKeyOf = window.eval("legacyBookKey");
+  const legacyResumeBook = { resumeId: "legacy-book", title: "Legacy Book", pages: [{ resumeSource: ["pages/page-001.png", 5, 9] }] };
+  localStorage.removeItem(bookKey(legacyResumeBook));
+  localStorage.setItem(legacyKeyOf(legacyResumeBook), JSON.stringify({ mode: "webtoon", page: 3, panel: 2 }));
+  const adopted = loadResume(legacyResumeBook);
+  t("legacy resume record is still read", adopted?.page === 3 && adopted?.panel === 2 && adopted?.mode === "webtoon");
+  t("legacy resume record is migrated to the new key", JSON.parse(localStorage.getItem(bookKey(legacyResumeBook)) || "null")?.page === 3);
+  t("legacy resume record is removed after migration", localStorage.getItem(legacyKeyOf(legacyResumeBook)) === null);
+  localStorage.removeItem(bookKey(legacyResumeBook));
+
   /* motion-comic contract: clean panel sources and storyboard text are retained */
   const motion = new Map();
   motion.set("project.json", async () => new Blob([JSON.stringify({project_id:"motion",settings:{page_width:1600,page_height:2400}})]));
