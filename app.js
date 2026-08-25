@@ -566,7 +566,12 @@ async function openBook(book) {
   state.page = Math.min(saved?.page || 0, book.pages.length - 1);
   state.panel = saved?.panel || 0;
   await render();
-  showHint(state.mode === "guided" ? "→ / space / click: next panel · 1 2 3: switch mode" : "→ / click: next · 1 2 3: switch mode");
+  showHint(navigationHint(state.readingDirection, state.mode === "guided"));
+}
+
+function navigationHint(direction = "ltr", guided = false) {
+  const forward = direction === "rtl" ? "←" : "→";
+  return guided ? `${forward} / space / click: next panel · 1 2 3: switch mode` : `${forward} / click: next · 1 2 3: switch mode`;
 }
 
 function closeBook() {
@@ -993,4 +998,4 @@ window.addEventListener("resize", () => {
 });
 
 /* expose internals for test.html */
-window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, state, setMode, next, prev };
+window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, navigationHint, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, state, setMode, next, prev };

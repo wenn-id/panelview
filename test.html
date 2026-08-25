@@ -303,6 +303,9 @@
   t("reading_direction rtl is preserved", rtlBook.readingDirection === "rtl");
   t("missing reading_direction defaults ltr", titledBook.readingDirection === "ltr");
   const navigationIntent = window.eval("navigationIntent");
+  const navigationHint = window.eval("navigationHint");
+  t("RTL hint points left for forward navigation", navigationHint("rtl", false).startsWith("← / click"));
+  t("LTR hint points right for forward navigation", navigationHint("ltr", true).startsWith("→ / space"));
   t("RTL ArrowRight means previous", navigationIntent("ArrowRight", "rtl") === "prev");
   t("RTL ArrowLeft means next", navigationIntent("ArrowLeft", "rtl") === "next");
   t("RTL PageDown stays forward", navigationIntent("PageDown", "rtl") === "next");
@@ -320,6 +323,7 @@
   t("page controls remain keyboard routable", keyboardIntent({ key:"PageDown", target:document.body }, "rtl") === "next");
   const cssText = await (await fetch("style.css")).text();
   t("mobile toolbar can wrap", /@media\s*\(max-width:\s*560px\)[\s\S]*#toolbar[^}]*flex-wrap:\s*wrap/.test(cssText));
+  t("mobile toolbar controls have explicit order", /@media[\s\S]*#toolbar > #btn-direction[^}]*order:\s*\d+/.test(cssText) && !/@media[\s\S]*#book-meta\s*\{[^}]*order/.test(cssText.replace(/#toolbar > #book-meta/g, "")));
 
   /* motion revisions: same page image and storyboard, different clean art */
   const cleanVariant = (sizes) => {
