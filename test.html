@@ -309,21 +309,30 @@
     m.set("panels/p01-01/clean.png", clean);
     return m;
   };
-  const revA = await bookFromFileMap(cleanVariant([31, 64]), "fb");
-  const revB = await bookFromFileMap(cleanVariant([77, 512]), "fb");
-  t("resume key covers motion clean art revisions", bookKey(revA) !== bookKey(revB));
+  const revAMap = cleanVariant([31, 64]);
+  const revBMap = cleanVariant([31, 64]);
+  revBMap.get("panels/p01-01/clean.png").resumeSource[2] = 999;
+  const revA = await bookFromFileMap(revAMap, "fb");
+  const revB = await bookFromFileMap(revBMap, "fb");
+  t("resume key covers same-size motion clean revisions", bookKey(revA) !== bookKey(revB));
 
-  /* upgrade path: progress stored under the pre-fingerprint key is adopted once */
+  const pickedFiles = window.eval("fileMapFromFiles");
+  const pickedA = await bookFromFileMap(pickedFiles([{ name: "page.png", size: 100, lastModified: 1 }]), "Picked");
+  const pickedB = await bookFromFileMap(pickedFiles([{ name: "page.png", size: 100, lastModified: 2 }]), "Picked");
+  t("resume key covers same-size picked file revisions", bookKey(pickedA) !== bookKey(pickedB));
+
+  /* old unscoped keys stay untouched; automatic adoption could cross-contaminate books */
   const loadResume = window.eval("loadResume");
   const legacyKeyOf = window.eval("legacyBookKey");
   const legacyResumeBook = { resumeId: "legacy-book", title: "Legacy Book", pages: [{ resumeSource: ["pages/page-001.png", 5, 9] }] };
+  const oldResume = JSON.stringify({ mode: "webtoon", page: 3, panel: 2 });
   localStorage.removeItem(bookKey(legacyResumeBook));
-  localStorage.setItem(legacyKeyOf(legacyResumeBook), JSON.stringify({ mode: "webtoon", page: 3, panel: 2 }));
-  const adopted = loadResume(legacyResumeBook);
-  t("legacy resume record is still read", adopted?.page === 3 && adopted?.panel === 2 && adopted?.mode === "webtoon");
-  t("legacy resume record is migrated to the new key", JSON.parse(localStorage.getItem(bookKey(legacyResumeBook)) || "null")?.page === 3);
-  t("legacy resume record is removed after migration", localStorage.getItem(legacyKeyOf(legacyResumeBook)) === null);
-  localStorage.removeItem(bookKey(legacyResumeBook));
+  localStorage.setItem(legacyKeyOf(legacyResumeBook), oldResume);
+  const ignored = loadResume(legacyResumeBook);
+  t("unscoped legacy resume is not adopted", ignored === null);
+  t("unscoped legacy resume is not deleted", localStorage.getItem(legacyKeyOf(legacyResumeBook)) === oldResume);
+  t("new key stays empty when only legacy record exists", localStorage.getItem(bookKey(legacyResumeBook)) === null);
+  localStorage.removeItem(legacyKeyOf(legacyResumeBook));
 
   /* motion-comic contract: clean panel sources and storyboard text are retained */
   const motion = new Map();

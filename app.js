@@ -59,6 +59,7 @@ async function readZip(blob, maxInflatedBytes = MAX_INFLATED_ENTRY_BYTES) {
     const method = cd.getUint16(p + 10, true);
     const compSize = cd.getUint32(p + 20, true);
     const uncompSize = cd.getUint32(p + 24, true);
+    const crc = cd.getUint32(p + 16, true);
     const nameLen = cd.getUint16(p + 28, true);
     const extraLen = cd.getUint16(p + 30, true);
     const commentLen = cd.getUint16(p + 32, true);
@@ -67,7 +68,7 @@ async function readZip(blob, maxInflatedBytes = MAX_INFLATED_ENTRY_BYTES) {
       throw new Error(ZIP64_UNSUPPORTED);
     }
     const name = nameDecoder.decode(new Uint8Array(cd.buffer, p + 46, nameLen));
-    if (!name.endsWith("/")) entries.push({ name, method, compSize, uncompSize, localOffset });
+    if (!name.endsWith("/")) entries.push({ name, method, compSize, uncompSize, crc, localOffset });
     p += 46 + nameLen + extraLen + commentLen;
   }
   async function extract(entry) {
@@ -406,7 +407,7 @@ function fileMapFromFiles(files) {
     /* strip the top-level folder name when present */
     const key = f.webkitRelativePath ? rel : f.name;
     const getter = async () => f;
-    getter.resumeSource = [key, f.size];
+    getter.resumeSource = [key, f.size, f.lastModified];
     map.set(key, getter);
   }
   return map;
@@ -426,7 +427,7 @@ async function fileMapFromZip(blob) {
   for (const e of zip.entries) {
     const key = e.name.slice(prefix.length);
     const getter = async () => zip.extract(e);
-    getter.resumeSource = [key, e.compSize, e.uncompSize];
+    getter.resumeSource = [key, e.compSize, e.uncompSize, e.crc];
     map.set(key, getter);
   }
   return map;
@@ -439,7 +440,7 @@ async function openInput(files) {
       const map = await fileMapFromZip(files[0]);
       book = await bookFromFileMap(map, files[0].name.replace(/\.(cbz|zip)$/i, ""));
     } else if (files.length === 1 && IMG_RE.test(files[0].name)) {
-      book = { title: files[0].name, comicSol: false, pages: [{ get: async () => files[0], panels: null, path: files[0].name, size: files[0].size }] };
+      book = { title: files[0].name, comicSol: false, pages: [{ get: async () => files[0], panels: null, path: files[0].name, size: files[0].size, lastModified: files[0].lastModified }] };
     } else {
       const map = fileMapFromFiles(files);
       const title = files[0].webkitRelativePath ? files[0].webkitRelativePath.split("/")[0] : "Comic";
@@ -502,14 +503,9 @@ function loadResume(book) {
   let saved = null;
   try {
     saved = JSON.parse(localStorage.getItem(bookKey(book)) || "null");
-    if (!saved) {
-      const legacyKey = legacyBookKey(book);
-      saved = JSON.parse(localStorage.getItem(legacyKey) || "null");
-      if (saved) {
-        localStorage.setItem(bookKey(book), JSON.stringify(saved));
-        localStorage.removeItem(legacyKey);
-      }
-    }
+    /* Legacy records (pre-fingerprint keys) are intentionally not adopted or
+       deleted: the old key is unscoped, so auto-migration could copy another
+       same-title book's progress. Users keep at most one stale record. */
   } catch {}
   return saved;
 }
