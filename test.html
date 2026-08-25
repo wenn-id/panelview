@@ -83,11 +83,87 @@
     eocd.setUint32(12, cdLen, true); eocd.setUint32(16, cdStart, true);
     return new Blob([...chunks, ...central, new Uint8Array(eocd.buffer)]);
   }
+  async function buildDeflatedZip(name, text) {
+    const enc = new TextEncoder();
+    const data = enc.encode(text);
+    const compressed = new Uint8Array(await new Response(
+      new Blob([data]).stream().pipeThrough(new CompressionStream("deflate-raw"))
+    ).arrayBuffer());
+    const crcTable = (() => { const t = new Uint32Array(256); for (let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c;} return t; })();
+    let crc = 0xFFFFFFFF;
+    for (const b of data) crc = crcTable[(crc ^ b) & 0xFF] ^ (crc >>> 8);
+    crc = (crc ^ 0xFFFFFFFF) >>> 0;
+    const nameB = enc.encode(name), local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true); local.setUint16(4, 20, true);
+    local.setUint16(8, 8, true); local.setUint32(14, crc, true);
+    local.setUint32(18, compressed.length, true); local.setUint32(22, data.length, true);
+    local.setUint16(26, nameB.length, true);
+    const central = new DataView(new ArrayBuffer(46));
+    central.setUint32(0, 0x02014b50, true); central.setUint16(10, 8, true);
+    central.setUint32(16, crc, true); central.setUint32(20, compressed.length, true);
+    central.setUint32(24, data.length, true); central.setUint16(28, nameB.length, true);
+    central.setUint32(42, 0, true);
+    const cdStart = 30 + nameB.length + compressed.length;
+    const eocd = new DataView(new ArrayBuffer(22));
+    eocd.setUint32(0, 0x06054b50, true); eocd.setUint16(8, 1, true);
+    eocd.setUint16(10, 1, true); eocd.setUint32(12, 46 + nameB.length, true);
+    eocd.setUint32(16, cdStart, true);
+    return new Blob([new Uint8Array(local.buffer), nameB, compressed,
+      new Uint8Array(central.buffer), nameB, new Uint8Array(eocd.buffer)]);
+  }
   const zblob = buildStoredZip([["book/p1.png","AAA"],["book/p2.png","BBB"]]);
   const zip = await readZip(zblob);
   t("zip entry count", zip.entries.length === 2);
   const body = await (await zip.extract(zip.entries[1])).text();
   t("zip extract stored", body === "BBB");
+  const oversized = await buildDeflatedZip("book/bomb.bin", "small");
+  const oversizedBytes = new Uint8Array(await oversized.arrayBuffer());
+  const centralAt = oversizedBytes.length - 22 - 46 - "book/bomb.bin".length;
+  new DataView(oversizedBytes.buffer).setUint32(centralAt + 24, 512 * 1024 * 1024 + 1, true);
+  const oversizedZip = await readZip(new Blob([oversizedBytes]));
+  let inflationError = "";
+  try { await oversizedZip.extract(oversizedZip.entries[0]); } catch (e) { inflationError = e.message; }
+  t("declared inflated size over the cap is refused",
+    inflationError === "ZIP entry exceeds the 536870912-byte inflation limit: book/bomb.bin");
+  /* a lying header must not get past the cap either: declared 5 bytes, real 40 */
+  const lying = await buildDeflatedZip("book/lie.bin", "0123456789".repeat(4));
+  const lyingBytes = new Uint8Array(await lying.arrayBuffer());
+  const lyingView = new DataView(lyingBytes.buffer);
+  const lyingCentral = lyingBytes.length - 22 - 46 - "book/lie.bin".length;
+  lyingView.setUint32(lyingCentral + 24, 5, true);
+  lyingView.setUint32(22, 5, true); /* local header uncompressed size */
+  const lyingZip = await readZip(new Blob([lyingBytes]), 8);
+  let lyingError = "";
+  try { await lyingZip.extract(lyingZip.entries[0]); } catch (e) { lyingError = e.message; }
+  t("inflated bytes beyond the cap abort mid-stream",
+    lyingError === "ZIP entry exceeds the 8-byte inflation limit: book/lie.bin");
+  const honestZip = await readZip(new Blob([lyingBytes]), 64);
+  t("inflation cap leaves honest entries alone",
+    (await (await honestZip.extract(honestZip.entries[0])).text()) === "0123456789".repeat(4));
+  const zip64MarkerBytes = new Uint8Array(await zblob.arrayBuffer());
+  const markerEocd = zip64MarkerBytes.length - 22;
+  const markerView = new DataView(zip64MarkerBytes.buffer);
+  markerView.setUint16(markerEocd + 8, 0xffff, true);
+  markerView.setUint16(markerEocd + 10, 0xffff, true);
+  markerView.setUint32(markerEocd + 12, 0xffffffff, true);
+  markerView.setUint32(markerEocd + 16, 0xffffffff, true);
+  let zip64MarkerError = "";
+  try { await readZip(new Blob([zip64MarkerBytes])); } catch (e) { zip64MarkerError = e.message; }
+  t("ZIP64 EOCD markers rejected", zip64MarkerError === "ZIP64 archives are not supported yet");
+  /* real archives put the ZIP64 locator immediately before the EOCD record */
+  const withLocator = new Uint8Array(await zblob.arrayBuffer());
+  const locator = new Uint8Array(20);
+  new DataView(locator.buffer).setUint32(0, 0x07064b50, true);
+  let zip64LocatorError = "";
+  try {
+    await readZip(new Blob([withLocator.subarray(0, withLocator.length - 22), locator,
+      withLocator.subarray(withLocator.length - 22)]));
+  } catch (e) { zip64LocatorError = e.message; }
+  t("ZIP64 EOCD locator rejected", zip64LocatorError === "ZIP64 archives are not supported yet");
+  /* a ZIP64 marker inside an entry's own bytes must not be mistaken for the locator */
+  const innocent = buildStoredZip([["book/p1.png", "PK\u0006\u0007PK\u0006\u0007"]]);
+  t("locator bytes inside entry data are not treated as ZIP64",
+    (await readZip(innocent)).entries.length === 1);
   const map = await fileMapFromZip(zblob);
   t("zip prefix strip", map.has("p1.png") && map.has("p2.png"));
   const book = await bookFromFileMap(map, "TestBook");
