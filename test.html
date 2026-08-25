@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><title>PanelView tests</title></head>
 <body>
 <pre id="out">running…</pre>
-<div id="landing" hidden><div id="dropzone"></div><button id="btn-demo"></button>
+<div id="landing" hidden><div id="dropzone" tabindex="0" role="button" aria-label="Open a comic"></div><button id="btn-demo"></button>
 <input type="file" id="file-input" hidden><input type="file" id="dir-input" hidden></div>
 <div id="reader" hidden><div id="progress"><div id="progress-fill"></div></div>
 <div id="toolbar"><button id="btn-close"></button><div id="book-meta"><span id="book-title"></span><span id="book-subtitle" hidden></span></div>
@@ -640,6 +640,44 @@
     URL.revokeObjectURL = realRevoke;
     resetReaderState(null);
   }
+
+  /* accessibility pass: accessible names, live position, focus, reduced motion */
+  const idxText = await (await fetch("index.html")).text();
+  const iconButtons = [
+    ['data-mode="page"', "Page mode"],
+    ['data-mode="webtoon"', "Webtoon mode"],
+    ['data-mode="guided"', "Guided mode"],
+    ['data-mode="motion"', "Motion-comic mode"],
+    ['id="btn-close"', "Close"],
+    ['id="btn-fs"', "Fullscreen"],
+  ];
+  t("every icon button has an accessible name", iconButtons.every(([selector, name]) => {
+    const tag = idxText.split("<button").find((chunk) => chunk.includes(selector));
+    return !!tag && new RegExp(`aria-label="[^"]*${name}`).test(tag);
+  }));
+  t("position indicator is a polite live region", /<span id="pos"[^>]*role="status"[^>]*>|<span id="pos"[^>]*aria-live="polite"/.test(idxText));
+  const a11yCss = await (await fetch("style.css")).text();
+  t("reduced motion disables cinematic transitions", /@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(a11yCss));
+  t("reduced motion targets guided and motion canvases", (() => {
+    const block = a11yCss.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\n\}/);
+    return !!block && /\.guided-canvas/.test(block[0]) && /\.motion-canvas/.test(block[0]);
+  })());
+  const focusReader = window.eval("openBook");
+  const focusBook = { title: "focus", pages: [{ get: async () => new Blob(["p"]), panels: null }] };
+  document.getElementById("dropzone").focus();
+  await focusReader(focusBook);
+  t("opening a book moves focus into the reader", document.getElementById("reader").contains(document.activeElement));
+  window.eval("closeBook")();
+  t("closing a book returns focus to the dropzone", document.activeElement === document.getElementById("dropzone"));
+  const readerText = await (await fetch("reader.js")).text();
+  t("reader focuses close button on open", /\$\("#btn-close"\)\.focus\(/.test(readerText));
+  t("reader restores launcher focus on close", /launcher\.focus\(/.test(readerText));
+
+  /* PWA contract: installable shell, demo-only cache, no runtime comic data */
+  const reducedMotionText = a11yCss;
+  t("reduced motion removes guided transition", /\.guided-canvas[\s\S]*transition:\s*none/.test(reducedMotionText));
+  t("reduced motion removes motion transition", /\.motion-canvas[\s\S]*transition:\s*none/.test(reducedMotionText));
+  t("reduced motion disables page entrance animation", /animation-duration:\s*0\.01ms/.test(reducedMotionText));
 
   /* PWA contract: installable shell, demo-only cache, no runtime comic data */
   const pwaManifestResponse = await fetch("manifest.webmanifest");

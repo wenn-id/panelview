@@ -154,6 +154,8 @@ async function openBook(book) {
   }
   $("#landing").hidden = true;
   $("#reader").hidden = false;
+  /* focus management: move into the reader, return to the dropzone on close */
+  $("#btn-close").focus({ preventScroll: true });
   /* resume */
   const saved = loadResume(book);
   state.mode = saved?.mode || (book.comicSol ? "guided" : "page");
@@ -188,6 +190,9 @@ function closeBook() {
   if (thumbsButton) thumbsButton.setAttribute("aria-expanded", "false");
   $("#reader").hidden = true;
   $("#landing").hidden = false;
+  /* return focus to the launcher so keyboard users stay oriented */
+  const launcher = $("#dropzone");
+  if (launcher) launcher.focus({ preventScroll: true });
 }
 
 function persist() {

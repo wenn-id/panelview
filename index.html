@@ -48,21 +48,21 @@
 <div id="reader" hidden>
   <div id="progress"><div id="progress-fill"></div></div>
   <div id="toolbar">
-    <button id="btn-close" title="Close (Esc)">✕</button>
+    <button id="btn-close" title="Close (Esc)" aria-label="Close book (Escape)">✕</button>
     <div id="book-meta">
       <span id="book-title"></span>
       <span id="book-subtitle" hidden></span>
     </div>
-    <nav id="modes">
-      <button data-mode="page"  title="Page mode (1)">📖</button>
-      <button data-mode="webtoon" title="Webtoon mode (2)">📜</button>
-      <button data-mode="guided" title="Guided mode (3)">🎬</button>
-      <button data-mode="motion" title="Motion-comic mode (4)" hidden>✨</button>
+    <nav id="modes" aria-label="Reading modes">
+      <button data-mode="page"  title="Page mode (1)" aria-label="Page mode (1)">📖</button>
+      <button data-mode="webtoon" title="Webtoon mode (2)" aria-label="Webtoon mode (2)">📜</button>
+      <button data-mode="guided" title="Guided mode (3)" aria-label="Guided mode (3)">🎬</button>
+      <button data-mode="motion" title="Motion-comic mode (4)" aria-label="Motion-comic mode (4)" hidden>✨</button>
     </nav>
-    <span id="pos"></span>
+    <span id="pos" role="status" aria-live="polite"></span>
     <button id="btn-direction" title="Reading direction: LTR (click to toggle)" aria-label="Reading direction: LTR (click to toggle)">LTR</button>
     <button id="btn-thumbs" title="Show thumbnails (t)" aria-label="Show thumbnails (t)" aria-expanded="false">▦</button>
-    <button id="btn-fs" title="Fullscreen (f)">⛶</button>
+    <button id="btn-fs" title="Fullscreen (f)" aria-label="Fullscreen (f)">⛶</button>
   </div>
   <div id="schema-warning" role="status" hidden></div>
   <div id="stage"></div>
