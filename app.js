@@ -1108,3 +1108,7 @@ window.addEventListener("resize", () => {
 
 /* expose internals for test.html */
 window.__panelview = { readZip, layoutRects, naturalCompare, runsOf, fileMapFromZip, bookFromFileMap, bookKey, legacyBookKey, loadResume, navigationIntent, navigationHint, stageClickIntent, swipeIntent, markSwipeHandled, consumeSwipeClick, isInteractiveTarget, toggleDirection, toggleThumbs, renderThumbs, jumpToPage, shouldPrefetchNextPanel, prefetchGuidedNext, thumbs, state, setMode, next, prev };
+
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}

@@ -1,0 +1,18 @@
+{
+  "name": "PanelView",
+  "short_name": "PanelView",
+  "description": "A cinematic comic reader that runs entirely in your browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#111420",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23111420'/><rect x='14' y='14' width='72' height='40' rx='6' fill='%23f5c518'/><rect x='14' y='62' width='33' height='24' rx='6' fill='%233a86ff'/><rect x='53' y='62' width='33' height='24' rx='6' fill='%23e0e3ef'/></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

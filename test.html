@@ -632,6 +632,30 @@
     resetReaderState(null);
   }
 
+  /* PWA contract: installable shell, demo-only cache, no runtime comic data */
+  const pwaManifestResponse = await fetch("manifest.webmanifest");
+  t("PWA manifest exists", pwaManifestResponse.ok);
+  if (pwaManifestResponse.ok) {
+    const manifest = await pwaManifestResponse.json();
+    t("manifest identifies PanelView", manifest.name === "PanelView" && manifest.start_url === "./");
+    t("manifest is standalone", manifest.display === "standalone" && typeof manifest.icons?.length === "number");
+  }
+  const swResponse = await fetch("sw.js");
+  t("service worker exists", swResponse.ok);
+  if (swResponse.ok) {
+    const swText = await swResponse.text();
+    t("service worker caches app shell and demo only", /CACHE_ASSETS/.test(swText) && /demo\/demo\.json/.test(swText) && /demo\/page-001\.jpg/.test(swText));
+    t("service worker excludes runtime comic data", !/cache\.put\(request|cache\.add\(request|file-input|blob:/.test(swText));
+    t("service worker uses offline-first shell fallback", /caches\.match\(request\)/.test(swText) && /network|fetch\(request\)/.test(swText));
+    t("service worker installs the explicit allowlist", /cache\.addAll\(CACHE_ASSETS\)/.test(swText));
+    t("service worker never writes fetched runtime requests", !/cache\.put\(request|cache\.add\(request/.test(swText));
+  }
+  const indexText = await (await fetch("index.html")).text();
+  t("index links the web app manifest", /<link rel="manifest" href="manifest\.webmanifest">/.test(indexText));
+  const appShellText = await (await fetch("app.js")).text();
+  t("app registers the service worker", /navigator\.serviceWorker\.register\("\.\/sw\.js"\)/.test(appShellText));
+  t("registration is failure-tolerant", /navigator\.serviceWorker\.register\("\.\/sw\.js"\)\.catch/.test(appShellText));
+
   /* CI contract: headless runner + workflows must exist in the repo */
   t("headless runner exists", (await fetch("tools/run-tests.mjs")).ok);
   t("CI workflow exists", (await fetch(".github/workflows/ci.yml")).ok);
