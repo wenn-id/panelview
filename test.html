@@ -8,7 +8,7 @@
 <div id="reader" hidden><div id="progress"><div id="progress-fill"></div></div>
 <div id="toolbar"><button id="btn-close"></button><div id="book-meta"><span id="book-title"></span><span id="book-subtitle" hidden></span></div>
 <nav id="modes"><button data-mode="page"></button><button data-mode="webtoon"></button><button data-mode="guided"></button></nav>
-<span id="pos"></span><button id="btn-direction"></button><button id="btn-fs"></button></div><div id="stage"></div><div id="hint"></div></div>
+<span id="pos"></span><button id="btn-direction"></button><button id="btn-thumbs"></button><button id="btn-fs"></button></div><div id="stage"></div><div id="thumbs" hidden></div><div id="hint"></div></div>
 <script src="app.js"></script>
 <script>
 (async () => {
@@ -505,6 +505,86 @@
     resetReaderState(missingMotionBook);
     await setModeFn("motion");
     t("unsupported motion mode is refused by setMode", readerState.mode === "page");
+    closeReader();
+
+    /* thumbnail strip */
+    const thumbsEl = document.getElementById("thumbs");
+    const thumbsBtn = document.getElementById("btn-thumbs");
+    const toggleThumbs = window.eval("toggleThumbs");
+    const thumbsState = window.eval("thumbs");
+    let thumbGets = 0;
+    const thumbPage = (id) => ({ get:async () => { thumbGets++; return new Blob([id]); } });
+    const threePageBook = { title:"thumb-test", pages:[thumbPage("a"), thumbPage("b"), thumbPage("c")] };
+    resetReaderState(threePageBook);
+    t("thumbs panel starts hidden", thumbsEl.hidden === true);
+    t("thumbs state starts closed", thumbsState.open === false);
+    t("thumbnail sources stay lazy while closed", thumbGets === 0);
+    toggleThumbs();
+    t("toggleThumbs opens strip", thumbsState.open === true && thumbsEl.hidden === false);
+    t("strip has one button per page", thumbsEl.querySelectorAll("button").length === 3);
+    t("opening strip requests each thumbnail source", thumbGets === 3);
+    const secondBtn = thumbsEl.querySelectorAll("button")[1];
+    t("active thumb matches current page", secondBtn.classList.contains("active") === false);
+    t("first thumb is active at page 0", thumbsEl.querySelector("button.active")?.dataset?.page === "0");
+    await new Promise((r) => setTimeout(r, 0)); /* let lazy thumbnail render */
+    t("first thumbnail contains a canvas", thumbsEl.querySelector("button canvas") !== null);
+    secondBtn.click();
+    t("clicking thumbnail changes state.page", readerState.page === 1);
+    t("active thumb updates after jump", thumbsEl.querySelector("button.active")?.dataset?.page === "1");
+    readerState.page = 2;
+    await window.eval("renderThumbs")();
+    t("renderThumbs refreshes active highlight", thumbsEl.querySelector("button.active")?.dataset?.page === "2");
+    const jumpToPage = window.eval("jumpToPage");
+    resetReaderState(threePageBook);
+    readerState.mode = "webtoon";
+    document.getElementById("reader").hidden = false;
+    stageEl.style.height = "240px";
+    stageEl.style.overflowY = "auto";
+    stageEl.replaceChildren(...[0, 1, 2].map((index) => {
+      const image = document.createElement("img");
+      image.dataset.index = String(index);
+      image.style.display = "block";
+      image.style.height = "240px";
+      Object.defineProperty(image, "offsetTop", { value: index * 240 });
+      return image;
+    }));
+    stageEl.scrollTop = 0;
+    await jumpToPage(2);
+    t("webtoon thumbnail jump scrolls existing page", readerState.page === 2 && stageEl.scrollTop === 480);
+    readerState.mode = "page";
+    stageEl.replaceChildren();
+    stageEl.style.height = "";
+    stageEl.style.overflowY = "";
+    toggleThumbs();
+    t("toggleThumbs closes strip", thumbsState.open === false && thumbsEl.hidden === true);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+    t("t key toggles thumbnail strip", thumbsState.open === true && thumbsEl.hidden === false);
+    /* canvas thumbnails must actually paint their page source */
+    if (thumbsState.open) toggleThumbs();
+    closeReader();
+    const pngPage = (r, g, b) => ({ get:async () => {
+      const canvas = document.createElement("canvas"); canvas.width = 120; canvas.height = 160;
+      canvas.getContext("2d").fillStyle = `rgb(${r},${g},${b})`; canvas.getContext("2d").fillRect(0, 0, 120, 160);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      return blob;
+    } });
+    resetReaderState({ title:"thumb-png", pages:[pngPage(255,0,0), pngPage(0,255,0), pngPage(0,0,255)] });
+    toggleThumbs();
+    const painted = async (canvas) => {
+      const ctx = canvas.getContext("2d");
+      for (let i = 0; i < 40; i++) {
+        if (ctx.getImageData(canvas.width / 2, canvas.height / 2, 1, 1).data[3] > 0) return true;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      return false;
+    };
+    const canvases = [...thumbsEl.querySelectorAll("button canvas")];
+    const paints = [];
+    for (const c of canvases) paints.push(await painted(c));
+    const pixels = canvases.map((c) => [...c.getContext("2d").getImageData(c.width / 2, c.height / 2, 1, 1).data.slice(0, 3).join(",")]);
+    t("thumbnail canvas paints its page", paints.every(Boolean));
+    t("each thumbnail maps to its own page source", new Set(pixels).size === 3);
+    toggleThumbs();
     closeReader();
 
     const cssText = await (await fetch("style.css")).text();
