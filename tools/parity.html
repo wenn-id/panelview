@@ -13,7 +13,7 @@
 <div id="toolbar"><button id="btn-close"></button><div id="book-meta"><span id="book-title"></span><span id="book-subtitle" hidden></span></div>
 <nav id="modes"><button data-mode="page"></button><button data-mode="webtoon"></button><button data-mode="guided"></button><button data-mode="motion" hidden></button></nav>
 <span id="pos"></span><button id="btn-fs"></button></div><div id="schema-warning" hidden></div><div id="stage"></div><div id="hint"></div></div>
-<script src="../app.js"></script>
+<script type="module" src="../main.js"></script>
 <script type="module">
 /* Comic Sol parity harness: drives the real reader pipeline
    (bookFromFileMap → comicSolBook) against the committed fixture captured
@@ -24,7 +24,12 @@
 const results = [];
 const t = (name, ok, extra) => results.push((ok ? "PASS" : "FAIL") + ": " + name + (ok || extra == null ? "" : " — " + extra));
 
-const pv = window.__panelview;
+/* main.js is also a module now: wait for it to expose the shared surface. */
+let pv = null;
+for (let i = 0; i < 500 && !pv; i++) {
+  pv = window.__panelview;
+  if (!pv) await new Promise((r) => setTimeout(r, 10));
+}
 
 const fixture = await (await fetch("../tests/fixtures/sunlight-courier/files.json")).json();
 const manifestText = {};
